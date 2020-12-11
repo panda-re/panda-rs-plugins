@@ -1,0 +1,21 @@
+[package]
+name = "ir_call"
+version = "0.1.0"
+authors = ["tnballo <tnballo@users.noreply.github.com>"]
+edition = "2018"
+
+[[bin]]
+name = "ir_call"
+path = "src/lib.rs"
+required-features = ["bin"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# TODO: this will be hosted on crates.io!
+panda-re = { path = "/home/tballo/proj/panda-rs/panda-rs" }
+lazy_static = "1.4.0"
+
+[features]
+bin = ["panda-re/libpanda"]
