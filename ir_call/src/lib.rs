@@ -1,4 +1,5 @@
 use std::sync::Mutex;
+use std::ffi::CStr;
 
 #[macro_use]
 extern crate lazy_static;
@@ -32,14 +33,27 @@ lazy_static! {
 
 #[panda::init]
 fn init(_: &mut PluginHandle) {
-    *(ARGS.lock().unwrap()) = Args::from_panda_args();
-    println!("ir_call plugin init, target process: {}", ARGS.lock().unwrap().proc_name);
+    match ARGS.lock() {
+        Ok(mut args) => {
+            *args = Args::from_panda_args();
+            println!("ir_call plugin init, target process: {}", args.proc_name);
+        },
+        _ => panic!("ir_call plugin init failed!")
+    }
 }
 
 // Callbacks -----------------------------------------------------------------------------------------------------------
 
 #[panda::before_block_exec]
 fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock) {
-    // TOOD: something here
-    println!("bb hit!")
+    let curr_proc = OSI.get_current_process(cpu);
+    let curr_proc_name_c_str = unsafe { CStr::from_ptr((*curr_proc).name) };
+
+    if let Ok(curr_proc_name) = curr_proc_name_c_str.to_str() {
+        if let Ok(args) = ARGS.lock() {
+            if args.proc_name == curr_proc_name {
+                println!("bb hit, proc: {}", curr_proc_name);
+            }
+        }
+    }
 }

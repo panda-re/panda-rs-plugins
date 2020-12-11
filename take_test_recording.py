@@ -5,7 +5,7 @@ from pandare import blocking, Panda
 
 # No arguments, i386. Otherwise argument should be guest arch
 generic_type = argv[1] if len(argv) > 1 else "x86_64"
-command = argv[2] if len(argv) > 2 else "sudo dhclient -v -4"
+command = argv[2] if len(argv) > 2 else "dhclient -v -4"
 panda = Panda(generic=generic_type)
 
 @blocking

@@ -2,7 +2,7 @@
 
 RR_FILE=test-rr-snp
 RR_ND_LOG=test-rr-nondet.log
-DEF_PROC="foo"
+DEF_PROC="dhclient"
 
 if [ -z "$1" ]; then
     echo "No process name specified, defaulting to '$DEF_PROC'"
