@@ -1,19 +1,32 @@
-use std::sync::Mutex;
 use std::ffi::CStr;
 use std::fmt;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[macro_use]
 extern crate lazy_static;
 
-use panda::prelude::*;
+use crossbeam::queue::SegQueue;
+
 use panda::plugins::osi::OSI;
+use panda::prelude::*;
+
+// Globals -------------------------------------------------------------------------------------------------------------
+
+static BB_NUM: AtomicU64 = AtomicU64::new(0);
 
 lazy_static! {
-    static ref ARGS: Mutex<Args> = Mutex::new(Args::default());
+    static ref ARGS: Args = Args::from_panda_args();
 }
 
 lazy_static! {
-    static ref BBQ: Mutex<Vec<BasicBlock>> = Mutex::new(vec![]);
+    static ref BBQ: SegQueue<BasicBlock> = SegQueue::new();
+}
+
+lazy_static! {
+    static ref WORKER_POOL: rayon::ThreadPool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_cpus::get())
+        .build()
+        .unwrap();
 }
 
 // Structs -------------------------------------------------------------------------------------------------------------
@@ -39,40 +52,57 @@ impl Default for Args {
 }
 
 struct BasicBlock {
+    seq_num: u64,
     pc: target_ulong,
     bytes: Vec<u8>,
 }
 
 impl BasicBlock {
-    fn new(pc: target_ulong, bytes: Vec<u8>) -> Self {
-        BasicBlock { pc, bytes }
+    fn new(seq_num: u64, pc: target_ulong, bytes: Vec<u8>) -> Self {
+        BasicBlock { seq_num, pc, bytes }
     }
 }
 
 impl fmt::Display for BasicBlock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PC: {:08x}, BB_BYTES: {:x?})", self.pc, self.bytes)
+        write!(
+            f,
+            "SEQ: {}, PC: {:08x}, BB_BYTES: {:x?})",
+            self.seq_num, self.pc, self.bytes
+        )
     }
 }
 
 // Init ----------------------------------------------------------------------------------------------------------------
 
 #[panda::init]
-fn init(_: &mut PluginHandle) {
-    match ARGS.lock() {
-        Ok(mut args) => {
-            *args = Args::from_panda_args();
-            println!("il_trace plugin init, target process: {}", args.proc_name);
-        },
-        _ => panic!("il_trace plugin init failed!")
+fn init(_: &mut PluginHandle) -> bool {
+    lazy_static::initialize(&ARGS);
+
+    let cpu_cnt = num_cpus::get();
+    for i in 0..cpu_cnt {
+        WORKER_POOL.spawn(|| {
+            loop {
+                if let Some(bb) = BBQ.pop() {
+                    // TODO: remove this print
+                    println!("queue pop: {}", bb);
+                }
+            }
+        });
     }
+
+    println!(
+        "il_trace plugin init, target process: {}, CPU count: {}",
+        ARGS.proc_name, cpu_cnt
+    );
+
+    true
 }
 
-// Callbacks -----------------------------------------------------------------------------------------------------------
+// PANDA Callbacks -----------------------------------------------------------------------------------------------------
 
 #[panda::before_block_exec]
 fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock) {
-
     if panda::in_kernel(cpu) {
         return;
     }
@@ -81,23 +111,15 @@ fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock) {
     let curr_proc_name_c_str = unsafe { CStr::from_ptr((*curr_proc).name) };
 
     if let Ok(curr_proc_name) = curr_proc_name_c_str.to_str() {
-        if let Ok(args) = ARGS.lock() {
+        // BB belongs to target process
+        if ARGS.proc_name == curr_proc_name {
+            if let Ok(bytes) = panda::virtual_memory_read(cpu, tb.pc, tb.size.into()) {
+                let bb = BasicBlock::new(BB_NUM.fetch_add(1, Ordering::SeqCst), tb.pc, bytes);
 
-            // BB belongs to target process
-            if args.proc_name == curr_proc_name {
+                // TODO: remove this print
+                println!("proc: {}, queue push: {}", curr_proc_name, bb);
 
-                let bb_bytes = panda::virtual_memory_read(cpu, tb.pc, tb.size.into());
-
-                if let Ok(bytes) = bb_bytes {
-                    if let Ok(mut bbq) = BBQ.lock() {
-                        let bb = BasicBlock::new(tb.pc, bytes);
-
-                        // TODO: remove this print
-                        println!("proc: {}, queue push: {}", curr_proc_name, bb);
-
-                        bbq.push(bb);
-                    }
-                }
+                BBQ.push(bb);
             }
         }
     }

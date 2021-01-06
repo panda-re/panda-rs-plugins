@@ -1,4 +1,5 @@
 [workspace]
 members = [
+    "panda-il-trace",
     "panda-gdb",
 ]
