@@ -1,11 +1,11 @@
 [package]
-name = "ir_call"
+name = "panda-il-trace"
 version = "0.1.0"
 authors = ["tnballo <tnballo@users.noreply.github.com>"]
 edition = "2018"
 
 [[bin]]
-name = "ir_call"
+name = "panda-il-trace"
 path = "src/lib.rs"
 required-features = ["bin"]
 
@@ -13,9 +13,10 @@ required-features = ["bin"]
 crate-type = ["cdylib"]
 
 [dependencies]
-# TODO: this will be hosted on crates.io!
-panda-re = { path = "/home/tballo/proj/panda-rs/panda-rs" }
-lazy_static = "1.4.0"
+panda-re = "0.3.0"
+panda-re-sys = "0.1.0"
+lazy_static = "1.4"
+#falcon = "0.4.12"
 
 [features]
 bin = ["panda-re/libpanda"]
