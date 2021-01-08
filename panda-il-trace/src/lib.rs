@@ -61,6 +61,22 @@ impl Default for Args {
     }
 }
 
+// Helpers -------------------------------------------------------------------------------------------------------------
+
+fn finalize_bbs() -> Vec<il::BasicBlock> {
+
+    // No iter on the lock-free queue
+    let mut bbs_final = Vec::with_capacity(BBQ_OUT.len());
+    while let Some(bb) = BBQ_OUT.pop() {
+        bbs_final.push(bb);
+    }
+
+    // Guest execution order sort
+    bbs_final.sort_unstable_by_key(|bb| bb.seq_num);
+
+    bbs_final
+}
+
 // PANDA Callbacks -----------------------------------------------------------------------------------------------------
 
 #[panda::init]
@@ -68,6 +84,7 @@ fn init(_: &mut PluginHandle) -> bool {
     lazy_static::initialize(&ARGS);
 
     let mut cpu_cnt = num_cpus::get();
+    let cpu_total = cpu_cnt;
 
     // Leave producer thread a CPU, it'll be active most of runtime
     if cpu_cnt > 1 {
@@ -91,7 +108,7 @@ fn init(_: &mut PluginHandle) -> bool {
 
     println!(
         "il_trace plugin init, target process: {}, CPU count: {}",
-        ARGS.proc_name, cpu_cnt
+        ARGS.proc_name, cpu_total
     );
 
     true
@@ -105,13 +122,8 @@ fn uninit(_: &mut PluginHandle) {
         thread::sleep(Duration::from_secs(1));
     }
 
-    // No iter on the lock-free queue
-    let mut bbs_final = Vec::with_capacity(BBQ_OUT.len());
-    while let Some(bb) = BBQ_OUT.pop() {
-        bbs_final.push(bb);
-    }
-
-    let err_cnt = bbs_final.iter().filter(|bb| bb.trans.is_none()).count();
+    let bbs_final = finalize_bbs();
+    let err_cnt = bbs_final.iter().filter(|bb| bb.translation.is_none()).count();
 
     println!(
         "il_trace plugin uninit, lifted {} BBs, {} errors.",

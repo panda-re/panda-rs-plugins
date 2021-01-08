@@ -5,24 +5,57 @@ use falcon::translator;
 use falcon::translator::Translator;
 
 pub struct BasicBlock {
-    seq_num: usize,
-    pc: target_ulong,
-    bytes: Vec<u8>,
-    pub trans: Option<translator::BlockTranslationResult>,
+    pub seq_num: usize,
+    pub pc: target_ulong,
+    pub bytes: Vec<u8>,
+    pub translation: Option<translator::BlockTranslationResult>,
+
+    #[cfg(feature = "i386")]
+    translator: translator::x86::X86,
+
+    #[cfg(feature = "x86_64")]
+    translator: translator::x86::Amd64,
+
+    #[cfg(feature = "mips")]
+    translator: translator::mips::Mips,
+
+    #[cfg(feature = "mipsel")]
+    translator: translator::mips::Mipsel,
+
+    #[cfg(feature = "ppc")]
+    translator: translator::ppc::Ppc,
 }
 
 impl BasicBlock {
     pub fn new(seq_num: usize, pc: target_ulong, bytes: Vec<u8>) -> Self {
-        BasicBlock { seq_num, pc, bytes, trans: None }
+
+        #[cfg(feature = "i386")]
+        let translator = translator::x86::X86::new();
+
+        #[cfg(feature = "x86_64")]
+        let translator = translator::x86::Amd64::new();
+
+        #[cfg(feature = "mips")]
+        let translator = translator::mips::Mips::new();
+
+        #[cfg(feature = "mipsel")]
+        let translator = translator::mips::Mipsel::new();
+
+        #[cfg(feature = "ppc")]
+        let translator = translator::ppc::Ppc::new();
+
+        BasicBlock {
+            seq_num,
+            pc,
+            bytes,
+            translator,
+            translation: None
+        }
     }
 
     pub fn lift(&mut self) {
-
-        // TODO: support other archs
-        let translator = translator::x86::X86::new();
-
-        if let Ok(trans) = translator.translate_block(&self.bytes[..], self.pc as u64) {
-            self.trans = Some(trans);
+        if let Ok(translation) = self.translator.translate_block(&self.bytes[..], self.pc as u64) {
+            self.translation = Some(translation);
         }
     }
 }
@@ -34,11 +67,11 @@ impl fmt::Display for BasicBlock {
             "SEQ: {}, PC: {:08x}, BB_BYTES: {:x?}, LIFT: {}",
             self.seq_num, self.pc, self.bytes,
             {
-                match &self.trans {
-                    Some(trans) => {
+                match &self.translation {
+                    Some(translation) => {
                         let mut instrs = String::from("\n");
 
-                        for (_, cfg) in trans.instructions() {
+                        for (_, cfg) in translation.instructions() {
                             for block in cfg.blocks() {
                                 for instr in block.instructions() {
                                     instrs.push_str(&format!("{}\n", instr));
@@ -69,9 +102,9 @@ mod tests {
         let mut ret_bb = BasicBlock::new(0, 0, ret_encoding.to_vec());
 
         call_bb.lift();
-        assert(call_bb.trans.is_some());
+        assert(call_bb.translation.is_some());
         ret_bb.lift();
-        assert(ret_bb.trans.is_some());
+        assert(ret_bb.translation.is_some());
 
         // TODO: test call and ret detection here
     }
