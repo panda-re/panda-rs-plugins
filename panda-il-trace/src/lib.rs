@@ -71,7 +71,7 @@ fn finalize_bbs() -> Vec<il::BasicBlock> {
     }
 
     // Guest execution order sort
-    bbs_final.sort_unstable_by_key(|bb| bb.seq_num);
+    bbs_final.sort_unstable_by_key(|bb| bb.seq_num());
 
     bbs_final
 }
@@ -122,10 +122,7 @@ fn uninit(_: &mut PluginHandle) {
     }
 
     let bbs_final = finalize_bbs();
-    let err_cnt = bbs_final
-        .iter()
-        .filter(|bb| bb.translation.is_none())
-        .count();
+    let err_cnt = bbs_final.iter().filter(|bb| !bb.is_lifted()).count();
 
     println!(
         "il_trace plugin uninit, lifted {} BBs, {} errors.",
