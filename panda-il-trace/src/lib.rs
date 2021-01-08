@@ -1,8 +1,8 @@
 use std::ffi::CStr;
-use std::thread;
 use std::process;
-use std::time::Duration;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
+use std::time::Duration;
 
 #[macro_use]
 extern crate lazy_static;
@@ -64,7 +64,6 @@ impl Default for Args {
 // Helpers -------------------------------------------------------------------------------------------------------------
 
 fn finalize_bbs() -> Vec<il::BasicBlock> {
-
     // No iter on the lock-free queue
     let mut bbs_final = Vec::with_capacity(BBQ_OUT.len());
     while let Some(bb) = BBQ_OUT.pop() {
@@ -119,11 +118,14 @@ fn uninit(_: &mut PluginHandle) {
     // Finish any in-process lifts
     while BBQ_OUT.len() != BB_NUM.load(Ordering::SeqCst) {
         println!("Finishing lifting...");
-        thread::sleep(Duration::from_secs(1));
+        thread::sleep(Duration::from_secs(5));
     }
 
     let bbs_final = finalize_bbs();
-    let err_cnt = bbs_final.iter().filter(|bb| bb.translation.is_none()).count();
+    let err_cnt = bbs_final
+        .iter()
+        .filter(|bb| bb.translation.is_none())
+        .count();
 
     println!(
         "il_trace plugin uninit, lifted {} BBs, {} errors.",
@@ -146,7 +148,11 @@ fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock) {
     if let Ok(curr_proc_name) = curr_proc_name_c_str.to_str() {
         if ARGS.proc_name == curr_proc_name {
             if let Ok(bytes) = panda::virtual_memory_read(cpu, tb.pc, tb.size.into()) {
-                let bb = il::BasicBlock::new(BB_NUM.fetch_add(1, Ordering::SeqCst), tb.pc, bytes);
+                let bb = il::BasicBlock::new_zero_copy(
+                    BB_NUM.fetch_add(1, Ordering::SeqCst),
+                    tb.pc as u64,
+                    bytes,
+                );
                 BBQ_IN.push(bb);
             }
         }
