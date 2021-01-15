@@ -1,24 +1,26 @@
 use std::fmt;
 
-use falcon::il::ControlFlowGraph;
-use falcon::il::Expression::Constant;
-use falcon::il::Expression::Scalar;
-use falcon::il::Operation;
+use falcon::architecture::Architecture;
+use falcon::il::Expression::{Constant, Scalar};
+use falcon::il::{ControlFlowGraph, Operation, Scalar as OtherScalar};
 use falcon::translator;
 use falcon::translator::Translator;
 
 static RET_MARKER: &'static str = "<RETURN>";
 
-/// Direct calls: (call_site_pc, call_dst_pc).
-/// Indirect calls: (call_site_pc, call_dst_pc, register_used).
+/// Direct call/jump: (site_pc, dst_pc).
+/// Indirect call/jump: (site_pc, dst_pc, register_used).
 /// Returns: (ret_site_pc, ret_dst_pc)
-/// `Sentinel` is used internally to resolve indirect call and ret destinations.
+/// Sentinels: used internally to resolve indirect call/jump and ret destinations.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Call {
-    Direct(u64, u64),
-    Indirect(u64, u64, String),
+pub enum Branch {
+    DirectCall(u64, u64),
+    DirectJump(u64, u64),
+    IndirectCall(u64, u64, String),
+    IndirectJump(u64, u64, String),
+    CallSentinel(u64, usize, String),
+    JumpSentinel(u64, usize, String),
     Return(u64, u64),
-    Sentinel(u64, usize, String),
 }
 
 /// Guest basic block, can map to TCG/LLVM execution delimiters (e.g. subset of static BB in ELF/PE)
@@ -114,39 +116,92 @@ impl BasicBlock {
         &self.translation
     }
 
-    /// Get first call or return present.
+    /// Get first call/jump/return present.
     /// `lift()` must be called before this function.
-    pub fn find_call(&self) -> Option<Call> {
+    pub fn find_branch(&self) -> Option<Branch> {
         match &self.translation {
             Some(cfg) => {
                 for block in cfg.blocks() {
-                    for instr in block.instructions() {
+                    for (idx, instr) in block.instructions().iter().enumerate() {
                         match (instr.operation(), instr.address()) {
                             (Operation::Branch { target }, Some(site)) => {
-                                match target {
-                                    // Direct call
-                                    Constant(addr) => {
-                                        if let Some(dst) = addr.value_u64() {
-                                            return Some(Call::Direct(site, dst));
+                                // Falcon doesn't differentiate calls from jumps at the IL level
+                                // This means we have to encode architecture-specific side effects here :(
+                                let mut is_call = false;
+                                if idx > 0 {
+                                    let prev_instr = &block.instructions()[idx - 1];
+
+                                    #[cfg(any(feature = "i386", feature = "x86_64"))]
+                                    {
+                                        #[cfg(feature = "x86_64")]
+                                        let sp = falcon::architecture::Amd64::new().stack_pointer();
+
+                                        #[cfg(feature = "i386")]
+                                        let sp = falcon::architecture::X86::new().stack_pointer();
+
+                                        if let Some(regs) = prev_instr.scalars_read() {
+                                            if regs.contains(&&sp) && prev_instr.is_store() {
+                                                is_call = true;
+                                            }
                                         }
                                     }
 
-                                    // Indirect call or return
+                                    //#[cfg(any(feature = "arm", feature = "ppc", feature = "mips", feature = "mipsel"))]
+                                    {
+                                        if let Some(link_reg) = panda::reg_ret_addr() {
+                                            let link_reg_scalar = OtherScalar::new(
+                                                link_reg.to_string().to_lowercase(),
+                                                32,
+                                            );
+                                            if let Some(regs) = prev_instr.scalars_written() {
+                                                if regs.contains(&&link_reg_scalar) {
+                                                    is_call = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                match target {
+                                    // Direct call or jump
+                                    Constant(addr) => {
+                                        if let Some(dst) = addr.value_u64() {
+                                            match is_call {
+                                                true => return Some(Branch::DirectCall(site, dst)),
+                                                false => {
+                                                    return Some(Branch::DirectJump(site, dst))
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Indirect call, jump, or return
                                     // PC of the next BB executed is dest, fill sentinel with sequence number
                                     Scalar(reg) => {
                                         // TODO: is there a better way to differentiate returns from indirect calls?
                                         if reg.name().contains("temp") {
-                                            return Some(Call::Sentinel(
+                                            return Some(Branch::CallSentinel(
                                                 site,
                                                 self.seq_num,
                                                 String::from(RET_MARKER),
                                             ));
                                         } else {
-                                            return Some(Call::Sentinel(
-                                                site,
-                                                self.seq_num,
-                                                String::from(reg.name()),
-                                            ));
+                                            match is_call {
+                                                true => {
+                                                    return Some(Branch::CallSentinel(
+                                                        site,
+                                                        self.seq_num,
+                                                        String::from(reg.name()),
+                                                    ));
+                                                }
+                                                false => {
+                                                    return Some(Branch::JumpSentinel(
+                                                        site,
+                                                        self.seq_num,
+                                                        String::from(reg.name()),
+                                                    ));
+                                                }
+                                            }
                                         }
                                     }
 
@@ -196,7 +251,9 @@ impl fmt::Display for BasicBlock {
 mod tests {
     use super::*;
 
-    // TODO: finish and run this test
+    // TODO: tests for ARM and PPC
+
+    // TODO: finish/expand/run this test
     #[cfg(feature = "mips")]
     #[test]
     fn test_mips_simple() {
@@ -208,32 +265,27 @@ mod tests {
         assert!(call_imm_bb.translation.is_some());
         println!(
             "CALL_IMM -> {:x?}\n\n{}",
-            call_imm_bb.find_call(),
+            call_imm_bb.find_branch(),
             call_imm_bb
         );
-        assert_eq!(call_imm_bb.find_call(), Some(Call::Direct(0, 0x100)));
+        assert_eq!(
+            call_imm_bb.find_branch(),
+            Some(Branch::DirectCall(0, 0x100))
+        );
 
         let mut ret_bb = BasicBlock::new(0, 0, &ret_encoding);
         ret_bb.lift();
         assert!(ret_bb.translation.is_some());
-        println!("RET -> {:x?}\n\n{}", ret_bb.find_call(), ret_bb);
+        println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
         assert_eq!(
-            ret_bb.find_call(),
-            Some(Call::Sentinel(0, 0, RET_MARKER.to_string()))
+            ret_bb.find_branch(),
+            Some(Branch::Sentinel(0, 0, RET_MARKER.to_string()))
         );
     }
 
     #[cfg(feature = "x86_64")]
     #[test]
-    fn test_x64() {
-        #[rustfmt::skip]
-        let call_imm_encoding: [u8; 14] = [
-            0x48, 0x89, 0xd8,               // mov rax, rbx
-            0x48, 0xff, 0xc0,               // inc rax
-            0xe8, 0x2c, 0x13, 0x00, 0x00,   // call 0x1331
-            0x48, 0x31, 0xc0,               // xor rax, rax
-        ];
-
+    fn test_x64_call_indirect() {
         #[rustfmt::skip]
         let call_ind_encoding: [u8; 11] = [
             0x48, 0x89, 0xd8,               // mov rax, rbx
@@ -242,11 +294,28 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
+        let mut call_ind_bb = BasicBlock::new(0, 0, &call_ind_encoding);
+        call_ind_bb.lift();
+        assert!(call_ind_bb.translation.is_some());
+        println!(
+            "CALL_IND -> {:x?}\n\n{}",
+            call_ind_bb.find_branch(),
+            call_ind_bb
+        );
+        assert_eq!(
+            call_ind_bb.find_branch(),
+            Some(Branch::CallSentinel(6, 0, "rax".to_string()))
+        );
+    }
+
+    #[cfg(feature = "x86_64")]
+    #[test]
+    fn test_x64_call_direct() {
         #[rustfmt::skip]
-        let ret_encoding: [u8; 10] = [
+        let call_imm_encoding: [u8; 14] = [
             0x48, 0x89, 0xd8,               // mov rax, rbx
             0x48, 0xff, 0xc0,               // inc rax
-            0xc3,                           // ret
+            0xe8, 0x2c, 0x13, 0x00, 0x00,   // call 0x1337
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
@@ -255,31 +324,85 @@ mod tests {
         assert!(call_imm_bb.translation.is_some());
         println!(
             "CALL_IMM -> {:x?}\n\n{}",
-            call_imm_bb.find_call(),
+            call_imm_bb.find_branch(),
             call_imm_bb
         );
-        assert_eq!(call_imm_bb.find_call(), Some(Call::Direct(6, 0x1337)));
-
-        let mut call_ind_bb = BasicBlock::new(0, 0, &call_ind_encoding);
-        call_ind_bb.lift();
-        assert!(call_ind_bb.translation.is_some());
-        println!(
-            "CALL_IND -> {:x?}\n\n{}",
-            call_ind_bb.find_call(),
-            call_ind_bb
-        );
         assert_eq!(
-            call_ind_bb.find_call(),
-            Some(Call::Sentinel(6, 0, "rax".to_string()))
+            call_imm_bb.find_branch(),
+            Some(Branch::DirectCall(6, 0x1337))
         );
+    }
+
+    #[cfg(feature = "x86_64")]
+    #[test]
+    fn test_x64_ret() {
+        #[rustfmt::skip]
+        let ret_encoding: [u8; 10] = [
+            0x48, 0x89, 0xd8,               // mov rax, rbx
+            0x48, 0xff, 0xc0,               // inc rax
+            0xc3,                           // ret
+            0x48, 0x31, 0xc0,               // xor rax, rax
+        ];
 
         let mut ret_bb = BasicBlock::new(0, 0, &ret_encoding);
         ret_bb.lift();
         assert!(ret_bb.translation.is_some());
-        println!("RET -> {:x?}\n\n{}", ret_bb.find_call(), ret_bb);
+        println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
         assert_eq!(
-            ret_bb.find_call(),
-            Some(Call::Sentinel(6, 0, RET_MARKER.to_string()))
+            ret_bb.find_branch(),
+            Some(Branch::CallSentinel(6, 0, RET_MARKER.to_string()))
+        );
+    }
+
+    /*
+    // TODO: This test fails. Falcon or Capstone bug?
+    // We don't actually care about direct jumps, but there's no reason this should fail.
+    #[cfg(feature = "x86_64")]
+    #[test]
+    fn test_x64_jump_direct() {
+        #[rustfmt::skip]
+        let jmp_imm_encoding: [u8; 14] = [
+            0x48, 0x89, 0xd8,               // mov rax, rbx
+            0x48, 0xff, 0xc0,               // inc rax
+            0xe9, 0x2c, 0x13, 0x00, 0x00,   // jmp 0x1337
+            0x48, 0x31, 0xc0,               // xor rax, rax
+        ];
+
+        let mut jmp_imm_bb = BasicBlock::new(0, 0, &jmp_imm_encoding);
+        jmp_imm_bb.lift();
+        assert!(jmp_imm_bb.translation.is_some());
+        println!(
+            "JMP_IMM -> {:x?}\n\n{}",
+            jmp_imm_bb.find_branch(),
+            jmp_imm_bb
+        );
+        assert_eq!(jmp_imm_bb.find_branch(), Some(Branch::DirectJump(6, 0x1337)));
+
+    }
+    */
+
+    #[cfg(feature = "x86_64")]
+    #[test]
+    fn test_x64_jump_indirect() {
+        #[rustfmt::skip]
+        let jmp_ind_encoding: [u8; 11] = [
+            0x48, 0x89, 0xd8,               // mov rax, rbx
+            0x48, 0xff, 0xc0,               // inc rax
+            0xff, 0xe0,                     // jmp rax
+            0x48, 0x31, 0xc0,               // xor rax, rax
+        ];
+
+        let mut jmp_ind_bb = BasicBlock::new(0, 0, &jmp_ind_encoding);
+        jmp_ind_bb.lift();
+        assert!(jmp_ind_bb.translation.is_some());
+        println!(
+            "JMP_IND -> {:x?}\n\n{}",
+            jmp_ind_bb.find_branch(),
+            jmp_ind_bb
+        );
+        assert_eq!(
+            jmp_ind_bb.find_branch(),
+            Some(Branch::JumpSentinel(6, 0, "rax".to_string()))
         );
     }
 }
