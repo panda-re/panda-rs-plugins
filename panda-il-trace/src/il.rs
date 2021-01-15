@@ -2,9 +2,12 @@ use std::fmt;
 
 use falcon::architecture::Architecture;
 use falcon::il::Expression::{Constant, Scalar};
-use falcon::il::{ControlFlowGraph, Operation, Scalar as OtherScalar};
+use falcon::il::{ControlFlowGraph, Operation};
 use falcon::translator;
 use falcon::translator::Translator;
+
+#[cfg(any(feature = "arm", feature = "ppc", feature = "mips", feature = "mipsel"))]
+use falcon::il::Scalar as OtherScalar;
 
 static RET_MARKER: &'static str = "<RETURN>";
 
@@ -30,6 +33,7 @@ pub struct BasicBlock {
     pc: u64,
     bytes: Vec<u8>,
     translation: Option<ControlFlowGraph>,
+    branch: Option<Branch>,
 
     #[cfg(feature = "i386")]
     translator: translator::x86::X86,
@@ -76,6 +80,7 @@ impl BasicBlock {
             bytes,
             translator,
             translation: None,
+            branch: None,
         }
     }
 
@@ -94,9 +99,24 @@ impl BasicBlock {
         &self.bytes[..]
     }
 
+    /// Get translation
+    pub fn translation(&self) -> &Option<ControlFlowGraph> {
+        &self.translation
+    }
+
     /// Get lift status
     pub fn is_lifted(&self) -> bool {
         self.translation.is_some()
+    }
+
+    /// Get branch
+    pub fn branch(&self) -> &Option<Branch> {
+        &self.branch
+    }
+
+    /// Get branch mut
+    pub fn branch_mut(&mut self) -> &mut Option<Branch> {
+        &mut self.branch
     }
 
     /// Lift BB to IR, caches successes so multiple calls won't re-lift
@@ -114,6 +134,14 @@ impl BasicBlock {
         }
 
         &self.translation
+    }
+
+    /// Lift BB, find first branch (if any).
+    /// Save the results in `self.translation` and `self.branch`.
+    /// This is not done by the constructor so that the work can be deferred for multi-threading.
+    pub fn process(&mut self) {
+        self.lift();
+        self.branch = self.find_branch();
     }
 
     /// Get first call/jump/return present.
@@ -146,7 +174,7 @@ impl BasicBlock {
                                         }
                                     }
 
-                                    //#[cfg(any(feature = "arm", feature = "ppc", feature = "mips", feature = "mipsel"))]
+                                    #[cfg(any(feature = "arm", feature = "ppc", feature = "mips", feature = "mipsel"))]
                                     {
                                         if let Some(link_reg) = panda::reg_ret_addr() {
                                             let link_reg_scalar = OtherScalar::new(

@@ -73,6 +73,26 @@ fn finalize_bbs() -> Vec<il::BasicBlock> {
     // Guest execution order sort
     bbs_final.sort_unstable_by_key(|bb| bb.seq_num());
 
+    // Determine indirect call/jump destinations
+    for bb_chunk in bbs_final.chunks_exact_mut(2) {
+        let dst = bb_chunk[1].pc();
+        let next_seq = bb_chunk[1].seq_num();
+        if let Some(branch) = bb_chunk[0].branch_mut() {
+            match branch {
+                Branch::CallSentinel(site, seq_num, reg) => {
+                    assert!(next_seq == (*seq_num + 1));
+                    *branch = Branch::IndirectCall(*site, dst, reg.to_string());
+                },
+                Branch::JumpSentinel(site, seq_num, reg) => {
+                    assert!(next_seq == (*seq_num + 1));
+                    *branch = Branch::IndirectJump(*site, dst, reg.to_string());
+                },
+                _ => continue,
+            }
+        }
+
+    }
+
     bbs_final
 }
 
@@ -94,11 +114,7 @@ fn init(_: &mut PluginHandle) -> bool {
         WORKER_POOL.spawn(|| {
             loop {
                 if let Some(mut bb) = BBQ_IN.pop() {
-                    bb.lift();
-
-                    // TODO: remove this print
-                    //println!("queue pop: {}", bb);
-
+                    bb.process();
                     BBQ_OUT.push(bb);
                 }
             }
@@ -117,7 +133,7 @@ fn init(_: &mut PluginHandle) -> bool {
 fn uninit(_: &mut PluginHandle) {
     // Finish any in-process lifts
     while BBQ_OUT.len() != BB_NUM.load(Ordering::SeqCst) {
-        println!("Finishing lifting...");
+        println!("Finishing lifting/analysis...");
         thread::sleep(Duration::from_secs(5));
     }
 
