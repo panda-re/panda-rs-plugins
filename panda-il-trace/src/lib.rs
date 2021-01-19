@@ -81,16 +81,27 @@ fn finalize_bbs() -> Vec<il::BasicBlock> {
             match branch {
                 Branch::CallSentinel(site, seq_num, reg) => {
                     assert!(next_seq == (*seq_num + 1));
-                    *branch = Branch::IndirectCall(*site, dst, reg.to_string());
-                },
+
+                    if reg == RET_MARKER {
+                        *branch = Branch::Return(*site, dst);
+                    } else {
+                        *branch = Branch::IndirectCall(*site, dst, reg.to_string());
+                    }
+
+                    if ARGS.debug {
+                        println!("{}", branch);
+                    }
+                }
                 Branch::JumpSentinel(site, seq_num, reg) => {
                     assert!(next_seq == (*seq_num + 1));
                     *branch = Branch::IndirectJump(*site, dst, reg.to_string());
-                },
+                    if ARGS.debug {
+                        println!("{}", branch);
+                    }
+                }
                 _ => continue,
             }
         }
-
     }
 
     bbs_final
@@ -111,19 +122,17 @@ fn init(_: &mut PluginHandle) -> bool {
     }
 
     for _ in 0..cpu_cnt {
-        WORKER_POOL.spawn(|| {
-            loop {
-                if let Some(mut bb) = BBQ_IN.pop() {
-                    bb.process();
-                    BBQ_OUT.push(bb);
-                }
+        WORKER_POOL.spawn(|| loop {
+            if let Some(mut bb) = BBQ_IN.pop() {
+                bb.process();
+                BBQ_OUT.push(bb);
             }
         });
     }
 
     println!(
-        "il_trace plugin init, target process: {}, CPU count: {}",
-        ARGS.proc_name, cpu_total
+        "il_trace plugin init, target process: {}, CPU count: {}, verbose: {}",
+        ARGS.proc_name, cpu_total, ARGS.debug
     );
 
     true

@@ -9,11 +9,11 @@ use falcon::translator::Translator;
 #[cfg(any(feature = "arm", feature = "ppc", feature = "mips", feature = "mipsel"))]
 use falcon::il::Scalar as OtherScalar;
 
-static RET_MARKER: &'static str = "<RETURN>";
+pub static RET_MARKER: &'static str = "<RETURN>";
 
 /// Direct call/jump: (site_pc, dst_pc).
 /// Indirect call/jump: (site_pc, dst_pc, register_used).
-/// Returns: (ret_site_pc, ret_dst_pc)
+/// Returns: (site_pc, dst_pc)
 /// Sentinels: used internally to resolve indirect call/jump and ret destinations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Branch {
@@ -24,6 +24,42 @@ pub enum Branch {
     CallSentinel(u64, usize, String),
     JumpSentinel(u64, usize, String),
     Return(u64, u64),
+}
+
+impl fmt::Display for Branch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            Branch::DirectCall(site_pc, dst_pc) => {
+                write!(f, "DirectCall@0x{:016x} -> 0x{:016x}", site_pc, dst_pc)
+            }
+            Branch::DirectJump(site_pc, dst_pc) => {
+                write!(f, "DirectJump@0x{:016x} -> 0x{:016x}", site_pc, dst_pc)
+            }
+            Branch::IndirectCall(site_pc, dst_pc, reg) => write!(
+                f,
+                "IndirectCall@0x{:016x} -> 0x{:016x} ({}) ",
+                site_pc, dst_pc, reg
+            ),
+            Branch::IndirectJump(site_pc, dst_pc, reg) => write!(
+                f,
+                "IndirectJump@0x{:016x} -> 0x{:016x} ({})",
+                site_pc, dst_pc, reg
+            ),
+            Branch::CallSentinel(site_pc, seq_num, reg_or_ret) => write!(
+                f,
+                "CallSentinel@0x{:016x} ({}), seq_num: {}",
+                site_pc, reg_or_ret, seq_num
+            ),
+            Branch::JumpSentinel(site_pc, seq_num, reg_or_ret) => write!(
+                f,
+                "JumpSentinel@0x{:016x} ({}), seq_num: {}",
+                site_pc, reg_or_ret, seq_num
+            ),
+            Branch::Return(site_pc, dst_pc) => {
+                write!(f, "Return@0x{:016x} -> 0x{:016x}", site_pc, dst_pc)
+            }
+        }
+    }
 }
 
 /// Guest basic block, can map to TCG/LLVM execution delimiters (e.g. subset of static BB in ELF/PE)
@@ -174,7 +210,12 @@ impl BasicBlock {
                                         }
                                     }
 
-                                    #[cfg(any(feature = "arm", feature = "ppc", feature = "mips", feature = "mipsel"))]
+                                    #[cfg(any(
+                                        feature = "arm",
+                                        feature = "ppc",
+                                        feature = "mips",
+                                        feature = "mipsel"
+                                    ))]
                                     {
                                         if let Some(link_reg) = panda::reg_ret_addr() {
                                             let link_reg_scalar = OtherScalar::new(
