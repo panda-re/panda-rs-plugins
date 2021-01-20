@@ -75,31 +75,30 @@ fn finalize_bbs() -> Vec<il::BasicBlock> {
 
     // Determine indirect call/jump destinations
     for bb_chunk in bbs_final.chunks_exact_mut(2) {
-        let dst = bb_chunk[1].pc();
+        let dst_pc = bb_chunk[1].pc();
         let next_seq = bb_chunk[1].seq_num();
+        let curr_seq = bb_chunk[0].seq_num();
         if let Some(branch) = bb_chunk[0].branch_mut() {
             match branch {
-                Branch::CallSentinel(site, seq_num, reg) => {
+                Branch::CallSentinel(site_pc, seq_num, reg) => {
                     assert!(next_seq == (*seq_num + 1));
 
                     if reg == RET_MARKER {
-                        *branch = Branch::Return(*site, dst);
+                        *branch = Branch::Return(*site_pc, dst_pc);
                     } else {
-                        *branch = Branch::IndirectCall(*site, dst, reg.to_string());
+                        *branch = Branch::IndirectCall(*site_pc, dst_pc, reg.to_string());
                     }
-
-                    if ARGS.debug {
-                        println!("{}", branch);
-                    }
-                }
-                Branch::JumpSentinel(site, seq_num, reg) => {
+                },
+                Branch::JumpSentinel(site_pc, seq_num, reg) => {
                     assert!(next_seq == (*seq_num + 1));
-                    *branch = Branch::IndirectJump(*site, dst, reg.to_string());
-                    if ARGS.debug {
-                        println!("{}", branch);
-                    }
+                    *branch = Branch::IndirectJump(*site_pc, dst_pc, reg.to_string());
+
                 }
                 _ => continue,
+            };
+
+            if ARGS.debug {
+                println!("{}: {}", curr_seq, branch);
             }
         }
     }
@@ -158,9 +157,9 @@ fn uninit(_: &mut PluginHandle) {
     process::exit(0);
 }
 
-#[panda::before_block_exec]
-fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock) {
-    if panda::in_kernel(cpu) {
+#[panda::after_block_exec]
+fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock, exit_code: u8) {
+    if (u32::from(exit_code) > panda_sys::TB_EXIT_IDX1) || (panda::in_kernel(cpu)) {
         return;
     }
 
