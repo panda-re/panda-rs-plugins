@@ -5,6 +5,8 @@ use falcon::il::Expression::{Constant, Scalar};
 use falcon::il::{ControlFlowGraph, Operation};
 use falcon::translator;
 use falcon::translator::Translator;
+use serde::Serialize;
+//use serde_with::DisplayFromStr;
 
 #[cfg(any(feature = "arm", feature = "ppc", feature = "mips", feature = "mipsel"))]
 use falcon::il::Scalar as OtherScalar;
@@ -15,7 +17,7 @@ pub static RET_MARKER: &'static str = "<RETURN>";
 /// Indirect call/jump: (site_pc, dst_pc, register_used).
 /// Returns: (site_pc, dst_pc)
 /// Sentinels: used internally to resolve indirect call/jump and ret destinations.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Branch {
     DirectCall(u64, u64),
     DirectJump(u64, u64),
@@ -63,27 +65,36 @@ impl fmt::Display for Branch {
 }
 
 /// Guest basic block, can map to TCG/LLVM execution delimiters (e.g. subset of static BB in ELF/PE)
-#[derive(Debug, Clone)]
+#[serde_as]
+#[derive(Debug, Clone, Serialize)]
 pub struct BasicBlock {
+
+    //#[serde_as(as = "DisplayFromStr")]
     seq_num: usize,
     pc: u64,
     bytes: Vec<u8>,
-    translation: Option<ControlFlowGraph>,
     branch: Option<Branch>,
 
+    translation: Option<ControlFlowGraph>,
+
     #[cfg(feature = "i386")]
+    #[serde(skip)]
     translator: translator::x86::X86,
 
     #[cfg(feature = "x86_64")]
+    #[serde(skip)]
     translator: translator::x86::Amd64,
 
     #[cfg(feature = "mips")]
+    #[serde(skip)]
     translator: translator::mips::Mips,
 
     #[cfg(feature = "mipsel")]
+    #[serde(skip)]
     translator: translator::mips::Mipsel,
 
     #[cfg(feature = "ppc")]
+    #[serde(skip)]
     translator: translator::ppc::Ppc,
 }
 
@@ -312,6 +323,29 @@ impl fmt::Display for BasicBlock {
                 }
             }
         )
+    }
+}
+
+/// A list of basic blocks, for serialization
+#[derive(Debug, Clone, Serialize)]
+pub struct BasicBlockList {
+    list: Vec<BasicBlock>,
+}
+
+impl BasicBlockList {
+    /// Constructor
+    pub fn from(list: Vec<BasicBlock>) -> BasicBlockList {
+        BasicBlockList { list }
+    }
+
+    /// Get count of translation errors
+    pub fn trans_err_cnt(&self) -> usize {
+        self.list.iter().filter(|bb| !bb.is_lifted()).count()
+    }
+
+    /// Get length
+    pub fn len(&self) -> usize {
+        self.list.len()
     }
 }
 

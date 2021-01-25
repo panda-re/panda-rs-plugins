@@ -17,4 +17,4 @@ cd -
 
 cargo build && \
     cp ../target/debug/libpanda_il_trace.so $PANDA_PATH/x86_64-softmmu/panda/plugins/panda_il_trace.so && \
-    $PANDA_PATH/x86_64-softmmu/panda-system-x86_64 -os "linux-64-ubuntu:4.15.0-72-generic-noaslr-nokaslr" -replay ../test -panda il_trace:proc_name=${1:-$DEF_PROC},debug=1 -m 1G
+    $PANDA_PATH/x86_64-softmmu/panda-system-x86_64 -os "linux-64-ubuntu:4.15.0-72-generic-noaslr-nokaslr" -replay ../test -panda il_trace:proc_name=${1:-$DEF_PROC},debug=1,trace_lib=1 -m 1G

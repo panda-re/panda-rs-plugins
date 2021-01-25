@@ -1,4 +1,5 @@
 use std::ffi::CStr;
+use std::fs;
 use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
@@ -6,6 +7,9 @@ use std::time::Duration;
 
 #[macro_use]
 extern crate lazy_static;
+
+#[macro_use]
+extern crate serde_with;
 
 use crossbeam::queue::SegQueue;
 use panda::plugins::osi::OSI;
@@ -47,8 +51,14 @@ struct Args {
     #[arg(required, about = "Process to trace")]
     proc_name: String,
 
-    #[arg(false, about = "Verbose print")]
+    #[arg(default = "il_trace.json", about = "File to log trace results")]
+    out_trace_file: String,
+
+    #[arg(about = "Verbose print")]
     debug: bool,
+
+    #[arg(about = "If set, trace inside of DLL functions (faster!)")]
+    trace_lib: bool,
 }
 
 // TODO: can this be macro-ed if every arg has a default?
@@ -56,14 +66,16 @@ impl Default for Args {
     fn default() -> Self {
         Self {
             proc_name: "init".to_string(),
+            out_trace_file: "il_trace.json".to_string(),
             debug: false,
+            trace_lib: true,
         }
     }
 }
 
 // Helpers -------------------------------------------------------------------------------------------------------------
 
-fn finalize_bbs() -> Vec<il::BasicBlock> {
+fn finalize_bbs() -> BasicBlockList {
     // No iter on the lock-free queue
     let mut bbs_final = Vec::with_capacity(BBQ_OUT.len());
     while let Some(bb) = BBQ_OUT.pop() {
@@ -88,11 +100,10 @@ fn finalize_bbs() -> Vec<il::BasicBlock> {
                     } else {
                         *branch = Branch::IndirectCall(*site_pc, dst_pc, reg.to_string());
                     }
-                },
+                }
                 Branch::JumpSentinel(site_pc, seq_num, reg) => {
                     assert!(next_seq == (*seq_num + 1));
                     *branch = Branch::IndirectJump(*site_pc, dst_pc, reg.to_string());
-
                 }
                 _ => continue,
             };
@@ -103,7 +114,7 @@ fn finalize_bbs() -> Vec<il::BasicBlock> {
         }
     }
 
-    bbs_final
+    BasicBlockList::from(bbs_final)
 }
 
 // PANDA Callbacks -----------------------------------------------------------------------------------------------------
@@ -130,8 +141,8 @@ fn init(_: &mut PluginHandle) -> bool {
     }
 
     println!(
-        "il_trace plugin init, target process: {}, CPU count: {}, verbose: {}",
-        ARGS.proc_name, cpu_total, ARGS.debug
+        "il_trace plugin init, target process: {}, CPU count: {}, trace_lib: {}, debug: {}",
+        ARGS.proc_name, cpu_total, ARGS.trace_lib, ARGS.debug
     );
 
     true
@@ -145,27 +156,44 @@ fn uninit(_: &mut PluginHandle) {
         thread::sleep(Duration::from_secs(5));
     }
 
-    let bbs_final = finalize_bbs();
-    let err_cnt = bbs_final.iter().filter(|bb| !bb.is_lifted()).count();
+    let bbl = finalize_bbs();
+    let err_cnt = bbl.trans_err_cnt();
 
     println!(
         "il_trace plugin uninit, lifted {} BBs, {} errors.",
-        bbs_final.len(),
+        bbl.len(),
         err_cnt
     );
+
+    println!("Writing trace to \'{}\'...", ARGS.out_trace_file,);
+    fs::write(
+        &ARGS.out_trace_file,
+        serde_json::to_string(&bbl).expect("serialization of BB list failed!"),
+    )
+    .expect("trace file write failed!");
 
     process::exit(0);
 }
 
 #[panda::after_block_exec]
 fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock, exit_code: u8) {
-    if (u32::from(exit_code) > panda_sys::TB_EXIT_IDX1) || (panda::in_kernel(cpu)) {
+    // Inside kernel code
+    if panda::in_kernel(cpu) {
         return;
     }
 
-    let curr_proc = OSI.get_current_process(cpu);
-    let curr_proc_name_c_str = unsafe { CStr::from_ptr((*curr_proc).name) };
+    // This block will be re-translated/re-executed due to interrupts, etc
+    if u32::from(exit_code) > panda_sys::TB_EXIT_IDX1 {
+        return;
+    }
 
+    // Inside DLL and user didn't request
+    let curr_proc = OSI.get_current_process(cpu);
+    if (!ARGS.trace_lib) && OSI.in_shared_object(cpu, curr_proc.as_ptr()) {
+        return;
+    }
+
+    let curr_proc_name_c_str = unsafe { CStr::from_ptr((*curr_proc).name) };
     if let Ok(curr_proc_name) = curr_proc_name_c_str.to_str() {
         if ARGS.proc_name == curr_proc_name {
             if let Ok(bytes) = panda::virtual_memory_read(cpu, tb.pc, tb.size.into()) {
