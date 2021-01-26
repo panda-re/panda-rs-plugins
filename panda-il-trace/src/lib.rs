@@ -1,5 +1,4 @@
 use std::ffi::CStr;
-use std::fs;
 use std::process;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
@@ -106,7 +105,7 @@ fn finalize_bbs() -> BasicBlockList {
                         *branch = Branch::IndirectCall {
                             site_pc,
                             dst_pc,
-                            reg_used: reg_or_ret.to_string()
+                            reg_used: reg_or_ret.to_string(),
                         };
                     }
                 }
@@ -175,21 +174,19 @@ fn uninit(_: &mut PluginHandle) {
         thread::sleep(Duration::from_secs(5));
     }
 
-    let bbl = finalize_bbs();
-    let err_cnt = bbl.trans_err_cnt();
+    let bb_list = finalize_bbs();
+    let err_cnt = bb_list.trans_err_cnt();
 
     println!(
         "il_trace plugin uninit, lifted {} BBs, {} errors.",
-        bbl.len(),
+        bb_list.len(),
         err_cnt
     );
 
     println!("Writing trace to \'{}\'...", ARGS.out_trace_file,);
-    fs::write(
-        &ARGS.out_trace_file,
-        serde_json::to_string(&bbl).expect("serialization of BB list failed!"),
-    )
-    .expect("trace file write failed!");
+    bb_list
+        .to_branch_json(&ARGS.out_trace_file)
+        .expect("trace file write failed!");
 
     process::exit(0);
 }

@@ -1,4 +1,6 @@
 use std::fmt;
+use std::fs;
+use std::path::Path;
 
 use falcon::architecture::Architecture;
 use falcon::il::Expression::{Constant, Scalar};
@@ -106,12 +108,12 @@ impl fmt::Display for Branch {
 #[serde_as]
 #[derive(Debug, Clone, Serialize)]
 pub struct BasicBlock {
-    //#[serde_as(as = "DisplayFromStr")]
     seq_num: usize,
     pc: u64,
     bytes: Vec<u8>,
     branch: Option<Branch>,
 
+    #[serde(skip)]
     translation: Option<ControlFlowGraph>,
 
     #[cfg(feature = "i386")]
@@ -392,6 +394,23 @@ impl BasicBlockList {
     pub fn len(&self) -> usize {
         self.list.len()
     }
+
+    /// Serialize JSON
+    pub fn to_branch_json<P: AsRef<Path>>(&self, file_path: P) -> std::io::Result<()> {
+        let bbs_with_branch: Vec<BasicBlock> = self
+            .list
+            .iter()
+            .filter(|bb| bb.branch().is_some())
+            .cloned()
+            .collect();
+
+        let branch_list = Self::from(bbs_with_branch);
+
+        fs::write(
+            file_path,
+            serde_json::to_string(&branch_list).expect("serialization of BB list failed!"),
+        )
+    }
 }
 
 // cargo test --features bin -- --show-output
@@ -418,7 +437,10 @@ mod tests {
         );
         assert_eq!(
             call_imm_bb.find_branch(),
-            Some(Branch::DirectCall { site_pc: 6, dst_pc: 0x100 })
+            Some(Branch::DirectCall {
+                site_pc: 6,
+                dst_pc: 0x100
+            })
         );
 
         let mut ret_bb = BasicBlock::new(0, 0, &ret_encoding);
@@ -427,7 +449,11 @@ mod tests {
         println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
         assert_eq!(
             ret_bb.find_branch(),
-            Some(Branch::CallSentinel { site_pc: 0, seq_nuum: 0, ret_or_reg: RET_MARKER.to_string() })
+            Some(Branch::CallSentinel {
+                site_pc: 0,
+                seq_nuum: 0,
+                ret_or_reg: RET_MARKER.to_string()
+            })
         );
     }
 
@@ -452,7 +478,11 @@ mod tests {
         );
         assert_eq!(
             call_ind_bb.find_branch(),
-            Some(Branch::CallSentinel { site_pc: 6, seq_num: 0, reg_or_ret: "rax".to_string() })
+            Some(Branch::CallSentinel {
+                site_pc: 6,
+                seq_num: 0,
+                reg_or_ret: "rax".to_string()
+            })
         );
     }
 
@@ -477,7 +507,10 @@ mod tests {
         );
         assert_eq!(
             call_imm_bb.find_branch(),
-            Some(Branch::DirectCall { site_pc: 6, dst_pc: 0x1337 })
+            Some(Branch::DirectCall {
+                site_pc: 6,
+                dst_pc: 0x1337
+            })
         );
     }
 
@@ -498,7 +531,11 @@ mod tests {
         println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
         assert_eq!(
             ret_bb.find_branch(),
-            Some(Branch::CallSentinel { site_pc: 6, seq_num: 0, reg_or_ret: RET_MARKER.to_string() })
+            Some(Branch::CallSentinel {
+                site_pc: 6,
+                seq_num: 0,
+                reg_or_ret: RET_MARKER.to_string()
+            })
         );
     }
 
@@ -524,7 +561,7 @@ mod tests {
             jmp_imm_bb.find_branch(),
             jmp_imm_bb
         );
-        assert_eq!(jmp_imm_bb.find_branch(), Some(Branch::DirectJump(6, 0x1337)));
+        assert_eq!(jmp_imm_bb.find_branch(), Some(Branch::DirectJump { site_pc: 6, dst_pc: 0x1337 }));
 
     }
     */
@@ -550,22 +587,62 @@ mod tests {
         );
         assert_eq!(
             jmp_ind_bb.find_branch(),
-            Some(Branch::JumpSentinel { site_pc: 6, seq_num: 0, reg_or_ret: "rax".to_string() })
+            Some(Branch::JumpSentinel {
+                site_pc: 6,
+                seq_num: 0,
+                reg_or_ret: "rax".to_string()
+            })
         );
     }
 
     #[test]
     fn test_branch_serialize() {
-        let branch = Branch::IndirectCall { site_pc: 0x0, dst_pc: 0x1337, reg_used: "rax".to_string() };
+        let branch = Branch::IndirectCall {
+            site_pc: 0x0,
+            dst_pc: 0x1337,
+            reg_used: "rax".to_string(),
+        };
         let expected = "{\"IndirectCall\":{\"site_pc\":0,\"dst_pc\":4919,\"reg_used\":\"rax\"}}";
         let actual = serde_json::to_string(&branch).unwrap();
         println!("{}", actual);
         assert_eq!(expected, actual);
 
-        let branch = Branch::Return { site_pc: 0x0, dst_pc: 0x1337 };
+        let branch = Branch::Return {
+            site_pc: 0x0,
+            dst_pc: 0x1337,
+        };
         let expected = "{\"Return\":{\"site_pc\":0,\"dst_pc\":4919}}";
         let actual = serde_json::to_string(&branch).unwrap();
         println!("{}", actual);
         assert_eq!(expected, actual);
+    }
+
+    #[cfg(feature = "x86_64")]
+    #[test]
+    fn test_block_serialize() {
+        #[rustfmt::skip]
+        let ret_encoding: [u8; 10] = [
+            0x48, 0x89, 0xd8,               // mov rax, rbx
+            0x48, 0xff, 0xc0,               // inc rax
+            0xc3,                           // ret
+            0x48, 0x31, 0xc0,               // xor rax, rax
+        ];
+
+        let mut ret_bb = BasicBlock::new(0, 0, &ret_encoding);
+        ret_bb.process();
+        assert!(ret_bb.translation.is_some());
+
+        let expected = "{\"seq_num\":0,\"pc\":0,\"bytes\":[72,137,216,72,255,192,195,72,49,192],\"branch\":{\"CallSentinel\":{\"site_pc\":6,\"seq_num\":0,\"reg_or_ret\":\"<RETURN>\"}}}";
+        let actual = serde_json::to_string(&ret_bb).unwrap();
+        println!("{}", actual);
+        assert_eq!(expected, actual);
+
+        let ret_bb_2 = ret_bb.clone();
+        let bb_vec = vec![ret_bb, ret_bb_2];
+        let bb_list = BasicBlockList::from(bb_vec);
+        assert_eq!(bb_list.len(), 2);
+        assert_eq!(bb_list.trans_err_cnt(), 0);
+
+        assert!(serde_json::to_string(&bb_list).is_ok());
     }
 }
