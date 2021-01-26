@@ -6,58 +6,96 @@ use falcon::il::{ControlFlowGraph, Operation};
 use falcon::translator;
 use falcon::translator::Translator;
 use serde::Serialize;
-//use serde_with::DisplayFromStr;
 
 #[cfg(any(feature = "arm", feature = "ppc", feature = "mips", feature = "mipsel"))]
 use falcon::il::Scalar as OtherScalar;
 
 pub static RET_MARKER: &'static str = "<RETURN>";
 
-/// Direct call/jump: (site_pc, dst_pc).
-/// Indirect call/jump: (site_pc, dst_pc, register_used).
-/// Returns: (site_pc, dst_pc)
-/// Sentinels: used internally to resolve indirect call/jump and ret destinations.
+/// Branch types.
+/// Sentinels are used internally to resolve indirect call/jump and ret destinations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum Branch {
-    DirectCall(u64, u64),
-    DirectJump(u64, u64),
-    IndirectCall(u64, u64, String),
-    IndirectJump(u64, u64, String),
-    CallSentinel(u64, usize, String),
-    JumpSentinel(u64, usize, String),
-    Return(u64, u64),
+    DirectCall {
+        site_pc: u64,
+        dst_pc: u64,
+    },
+    DirectJump {
+        site_pc: u64,
+        dst_pc: u64,
+    },
+    IndirectCall {
+        site_pc: u64,
+        dst_pc: u64,
+        reg_used: String,
+    },
+    IndirectJump {
+        site_pc: u64,
+        dst_pc: u64,
+        reg_used: String,
+    },
+    CallSentinel {
+        site_pc: u64,
+        seq_num: usize,
+        reg_or_ret: String,
+    },
+    JumpSentinel {
+        site_pc: u64,
+        seq_num: usize,
+        reg_or_ret: String,
+    },
+    Return {
+        site_pc: u64,
+        dst_pc: u64,
+    },
 }
 
 impl fmt::Display for Branch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            Branch::DirectCall(site_pc, dst_pc) => {
+            Branch::DirectCall { site_pc, dst_pc } => {
                 write!(f, "DirectCall@0x{:016x} -> 0x{:016x}", site_pc, dst_pc)
             }
-            Branch::DirectJump(site_pc, dst_pc) => {
+            Branch::DirectJump { site_pc, dst_pc } => {
                 write!(f, "DirectJump@0x{:016x} -> 0x{:016x}", site_pc, dst_pc)
             }
-            Branch::IndirectCall(site_pc, dst_pc, reg) => write!(
+            Branch::IndirectCall {
+                site_pc,
+                dst_pc,
+                reg_used,
+            } => write!(
                 f,
                 "IndirectCall@0x{:016x} -> 0x{:016x} ({}) ",
-                site_pc, dst_pc, reg
+                site_pc, dst_pc, reg_used
             ),
-            Branch::IndirectJump(site_pc, dst_pc, reg) => write!(
+            Branch::IndirectJump {
+                site_pc,
+                dst_pc,
+                reg_used,
+            } => write!(
                 f,
                 "IndirectJump@0x{:016x} -> 0x{:016x} ({})",
-                site_pc, dst_pc, reg
+                site_pc, dst_pc, reg_used
             ),
-            Branch::CallSentinel(site_pc, seq_num, reg_or_ret) => write!(
+            Branch::CallSentinel {
+                site_pc,
+                seq_num,
+                reg_or_ret,
+            } => write!(
                 f,
                 "CallSentinel@0x{:016x} ({}), seq_num: {}",
                 site_pc, reg_or_ret, seq_num
             ),
-            Branch::JumpSentinel(site_pc, seq_num, reg_or_ret) => write!(
+            Branch::JumpSentinel {
+                site_pc,
+                seq_num,
+                reg_or_ret,
+            } => write!(
                 f,
                 "JumpSentinel@0x{:016x} ({}), seq_num: {}",
                 site_pc, reg_or_ret, seq_num
             ),
-            Branch::Return(site_pc, dst_pc) => {
+            Branch::Return { site_pc, dst_pc } => {
                 write!(f, "Return@0x{:016x} -> 0x{:016x}", site_pc, dst_pc)
             }
         }
@@ -68,7 +106,6 @@ impl fmt::Display for Branch {
 #[serde_as]
 #[derive(Debug, Clone, Serialize)]
 pub struct BasicBlock {
-
     //#[serde_as(as = "DisplayFromStr")]
     seq_num: usize,
     pc: u64,
@@ -199,7 +236,7 @@ impl BasicBlock {
                 for block in cfg.blocks() {
                     for (idx, instr) in block.instructions().iter().enumerate() {
                         match (instr.operation(), instr.address()) {
-                            (Operation::Branch { target }, Some(site)) => {
+                            (Operation::Branch { target }, Some(site_pc)) => {
                                 // Falcon doesn't differentiate calls from jumps at the IL level
                                 // This means we have to encode architecture-specific side effects here :(
                                 let mut is_call = false;
@@ -245,11 +282,19 @@ impl BasicBlock {
                                 match target {
                                     // Direct call or jump
                                     Constant(addr) => {
-                                        if let Some(dst) = addr.value_u64() {
+                                        if let Some(dst_pc) = addr.value_u64() {
                                             match is_call {
-                                                true => return Some(Branch::DirectCall(site, dst)),
+                                                true => {
+                                                    return Some(Branch::DirectCall {
+                                                        site_pc,
+                                                        dst_pc,
+                                                    })
+                                                }
                                                 false => {
-                                                    return Some(Branch::DirectJump(site, dst))
+                                                    return Some(Branch::DirectJump {
+                                                        site_pc,
+                                                        dst_pc,
+                                                    })
                                                 }
                                             }
                                         }
@@ -260,26 +305,26 @@ impl BasicBlock {
                                     Scalar(reg) => {
                                         // TODO: is there a better way to differentiate returns from indirect calls?
                                         if reg.name().contains("temp") {
-                                            return Some(Branch::CallSentinel(
-                                                site,
-                                                self.seq_num,
-                                                String::from(RET_MARKER),
-                                            ));
+                                            return Some(Branch::CallSentinel {
+                                                site_pc,
+                                                seq_num: self.seq_num,
+                                                reg_or_ret: String::from(RET_MARKER),
+                                            });
                                         } else {
                                             match is_call {
                                                 true => {
-                                                    return Some(Branch::CallSentinel(
-                                                        site,
-                                                        self.seq_num,
-                                                        String::from(reg.name()),
-                                                    ));
+                                                    return Some(Branch::CallSentinel {
+                                                        site_pc,
+                                                        seq_num: self.seq_num,
+                                                        reg_or_ret: String::from(reg.name()),
+                                                    });
                                                 }
                                                 false => {
-                                                    return Some(Branch::JumpSentinel(
-                                                        site,
-                                                        self.seq_num,
-                                                        String::from(reg.name()),
-                                                    ));
+                                                    return Some(Branch::JumpSentinel {
+                                                        site_pc,
+                                                        seq_num: self.seq_num,
+                                                        reg_or_ret: String::from(reg.name()),
+                                                    });
                                                 }
                                             }
                                         }

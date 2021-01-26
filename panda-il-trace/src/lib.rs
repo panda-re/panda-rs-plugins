@@ -92,18 +92,37 @@ fn finalize_bbs() -> BasicBlockList {
         let curr_seq = bb_chunk[0].seq_num();
         if let Some(branch) = bb_chunk[0].branch_mut() {
             match branch {
-                Branch::CallSentinel(site_pc, seq_num, reg) => {
+                Branch::CallSentinel {
+                    site_pc,
+                    seq_num,
+                    reg_or_ret,
+                } => {
                     assert!(next_seq == (*seq_num + 1));
+                    let site_pc = *site_pc;
 
-                    if reg == RET_MARKER {
-                        *branch = Branch::Return(*site_pc, dst_pc);
+                    if reg_or_ret == RET_MARKER {
+                        *branch = Branch::Return { site_pc, dst_pc };
                     } else {
-                        *branch = Branch::IndirectCall(*site_pc, dst_pc, reg.to_string());
+                        *branch = Branch::IndirectCall {
+                            site_pc,
+                            dst_pc,
+                            reg_used: reg_or_ret.to_string()
+                        };
                     }
                 }
-                Branch::JumpSentinel(site_pc, seq_num, reg) => {
+                Branch::JumpSentinel {
+                    site_pc,
+                    seq_num,
+                    reg_or_ret,
+                } => {
                     assert!(next_seq == (*seq_num + 1));
-                    *branch = Branch::IndirectJump(*site_pc, dst_pc, reg.to_string());
+                    let site_pc = *site_pc;
+
+                    *branch = Branch::IndirectJump {
+                        site_pc,
+                        dst_pc,
+                        reg_used: reg_or_ret.to_string(),
+                    };
                 }
                 _ => continue,
             };
@@ -187,15 +206,16 @@ fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock, exit_code: u
         return;
     }
 
-    // Inside DLL and user didn't request
     let curr_proc = OSI.get_current_process(cpu);
-    if (!ARGS.trace_lib) && OSI.in_shared_object(cpu, curr_proc.as_ptr()) {
-        return;
-    }
-
     let curr_proc_name_c_str = unsafe { CStr::from_ptr((*curr_proc).name) };
+
     if let Ok(curr_proc_name) = curr_proc_name_c_str.to_str() {
         if ARGS.proc_name == curr_proc_name {
+            // Inside DLL and user didn't request
+            if (!ARGS.trace_lib) && OSI.in_shared_object(cpu, curr_proc.as_ptr()) {
+                return;
+            }
+
             if let Ok(bytes) = panda::virtual_memory_read(cpu, tb.pc, tb.size.into()) {
                 let bb = il::BasicBlock::new_zero_copy(
                     BB_NUM.fetch_add(1, Ordering::SeqCst),
