@@ -418,7 +418,7 @@ mod tests {
         );
         assert_eq!(
             call_imm_bb.find_branch(),
-            Some(Branch::DirectCall(0, 0x100))
+            Some(Branch::DirectCall { site_pc: 6, dst_pc: 0x100 })
         );
 
         let mut ret_bb = BasicBlock::new(0, 0, &ret_encoding);
@@ -427,7 +427,7 @@ mod tests {
         println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
         assert_eq!(
             ret_bb.find_branch(),
-            Some(Branch::Sentinel(0, 0, RET_MARKER.to_string()))
+            Some(Branch::CallSentinel { site_pc: 0, seq_nuum: 0, ret_or_reg: RET_MARKER.to_string() })
         );
     }
 
@@ -452,7 +452,7 @@ mod tests {
         );
         assert_eq!(
             call_ind_bb.find_branch(),
-            Some(Branch::CallSentinel(6, 0, "rax".to_string()))
+            Some(Branch::CallSentinel { site_pc: 6, seq_num: 0, reg_or_ret: "rax".to_string() })
         );
     }
 
@@ -477,7 +477,7 @@ mod tests {
         );
         assert_eq!(
             call_imm_bb.find_branch(),
-            Some(Branch::DirectCall(6, 0x1337))
+            Some(Branch::DirectCall { site_pc: 6, dst_pc: 0x1337 })
         );
     }
 
@@ -498,7 +498,7 @@ mod tests {
         println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
         assert_eq!(
             ret_bb.find_branch(),
-            Some(Branch::CallSentinel(6, 0, RET_MARKER.to_string()))
+            Some(Branch::CallSentinel { site_pc: 6, seq_num: 0, reg_or_ret: RET_MARKER.to_string() })
         );
     }
 
@@ -550,7 +550,22 @@ mod tests {
         );
         assert_eq!(
             jmp_ind_bb.find_branch(),
-            Some(Branch::JumpSentinel(6, 0, "rax".to_string()))
+            Some(Branch::JumpSentinel { site_pc: 6, seq_num: 0, reg_or_ret: "rax".to_string() })
         );
+    }
+
+    #[test]
+    fn test_branch_serialize() {
+        let branch = Branch::IndirectCall { site_pc: 0x0, dst_pc: 0x1337, reg_used: "rax".to_string() };
+        let expected = "{\"IndirectCall\":{\"site_pc\":0,\"dst_pc\":4919,\"reg_used\":\"rax\"}}";
+        let actual = serde_json::to_string(&branch).unwrap();
+        println!("{}", actual);
+        assert_eq!(expected, actual);
+
+        let branch = Branch::Return { site_pc: 0x0, dst_pc: 0x1337 };
+        let expected = "{\"Return\":{\"site_pc\":0,\"dst_pc\":4919}}";
+        let actual = serde_json::to_string(&branch).unwrap();
+        println!("{}", actual);
+        assert_eq!(expected, actual);
     }
 }
