@@ -7,9 +7,6 @@ use std::time::Duration;
 #[macro_use]
 extern crate lazy_static;
 
-#[macro_use]
-extern crate serde_with;
-
 use crossbeam::queue::SegQueue;
 use panda::plugins::osi::OSI;
 use panda::prelude::*;
@@ -18,6 +15,9 @@ use panda::prelude::*;
 
 pub mod il;
 pub use crate::il::*;
+
+pub mod callstack;
+pub use crate::callstack::*;
 
 // Globals -------------------------------------------------------------------------------------------------------------
 
@@ -50,14 +50,20 @@ struct Args {
     #[arg(required, about = "Process to trace")]
     proc_name: String,
 
-    #[arg(default = "il_trace.json", about = "File to log trace results")]
+    #[arg(default = "il_trace.json", about = "File to log trace results (JSON)")]
     out_trace_file: String,
 
-    #[arg(about = "Verbose print")]
-    debug: bool,
+    #[arg(default = "callstack.txt", about = "File to dump callstack (TXT)")]
+    out_callstack_file: String,
+
+    #[arg(about = "If set, add whitespace to JSON (larger file)")]
+    pretty_json: bool,
 
     #[arg(about = "If set, trace inside of DLL functions (faster!)")]
     trace_lib: bool,
+
+    #[arg(about = "Verbose print")]
+    debug: bool,
 }
 
 // TODO: can this be macro-ed if every arg has a default?
@@ -66,8 +72,10 @@ impl Default for Args {
         Self {
             proc_name: "init".to_string(),
             out_trace_file: "il_trace.json".to_string(),
+            out_callstack_file: "callstack.txt".to_string(),
             debug: false,
             trace_lib: true,
+            pretty_json: false,
         }
     }
 }
@@ -76,63 +84,22 @@ impl Default for Args {
 
 fn finalize_bbs() -> BasicBlockList {
     // No iter on the lock-free queue
-    let mut bbs_final = Vec::with_capacity(BBQ_OUT.len());
+    let mut bbs = Vec::with_capacity(BBQ_OUT.len());
     while let Some(bb) = BBQ_OUT.pop() {
-        bbs_final.push(bb);
+        bbs.push(bb);
     }
 
-    // Guest execution order sort
-    bbs_final.sort_unstable_by_key(|bb| bb.seq_num());
+    let final_trace = BasicBlockList::from(bbs);
 
-    // Determine indirect call/jump destinations
-    for bb_chunk in bbs_final.chunks_exact_mut(2) {
-        let dst_pc = bb_chunk[1].pc();
-        let next_seq = bb_chunk[1].seq_num();
-        let curr_seq = bb_chunk[0].seq_num();
-        if let Some(branch) = bb_chunk[0].branch_mut() {
-            match branch {
-                Branch::CallSentinel {
-                    site_pc,
-                    seq_num,
-                    reg_or_ret,
-                } => {
-                    assert!(next_seq == (*seq_num + 1));
-                    let site_pc = *site_pc;
-
-                    if reg_or_ret == RET_MARKER {
-                        *branch = Branch::Return { site_pc, dst_pc };
-                    } else {
-                        *branch = Branch::IndirectCall {
-                            site_pc,
-                            dst_pc,
-                            reg_used: reg_or_ret.to_string(),
-                        };
-                    }
-                }
-                Branch::JumpSentinel {
-                    site_pc,
-                    seq_num,
-                    reg_or_ret,
-                } => {
-                    assert!(next_seq == (*seq_num + 1));
-                    let site_pc = *site_pc;
-
-                    *branch = Branch::IndirectJump {
-                        site_pc,
-                        dst_pc,
-                        reg_used: reg_or_ret.to_string(),
-                    };
-                }
-                _ => continue,
-            };
-
-            if ARGS.debug {
-                println!("{}: {}", curr_seq, branch);
+    if ARGS.debug {
+        for bb in final_trace.blocks() {
+            if let Some(branch) = bb.branch() {
+                println!("{}: {}", bb.seq_num(), branch);
             }
         }
     }
 
-    BasicBlockList::from(bbs_final)
+    final_trace
 }
 
 // PANDA Callbacks -----------------------------------------------------------------------------------------------------
@@ -183,10 +150,13 @@ fn uninit(_: &mut PluginHandle) {
         err_cnt
     );
 
-    println!("Writing trace to \'{}\'...", ARGS.out_trace_file,);
+    println!("Writing trace to \'{}\'...", ARGS.out_trace_file);
     bb_list
-        .to_branch_json(&ARGS.out_trace_file)
+        .to_branch_json(&ARGS.out_trace_file, ARGS.pretty_json)
         .expect("trace file write failed!");
+
+    println!("Writing callstack to to \'{}\'...", ARGS.out_callstack_file);
+    to_callstack_file(&bb_list, &ARGS.out_callstack_file).expect("callstack file write failed!");
 
     process::exit(0);
 }
