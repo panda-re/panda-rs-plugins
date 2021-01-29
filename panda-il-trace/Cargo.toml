@@ -13,11 +13,8 @@ required-features = ["bin"]
 crate-type = ["cdylib"]
 
 [dependencies]
-# TODO: need panda-rs updated on crates.io, this uses new-ish OSI stuff!
-#panda-re = "0.3.0"
-#panda-re-sys = "0.1.0"
-panda-re = { path = "/home/tballo/proj/panda-rs/panda-rs"}
-panda-re-sys = { path = "/home/tballo/proj/panda-rs/panda-sys"}
+panda-re = "0.4.0"
+panda-re-sys = "0.1.0"
 lazy_static = "1.4"
 crossbeam = "0.8.0"
 num_cpus = "1.13.0"

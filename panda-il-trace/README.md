@@ -2,7 +2,7 @@
 
 ## Summary
 
-Multi-threaded, per-process tracing using an intermediate language (currently [Falcon IL](https://docs.rs/falcon/0.4.12/falcon/il/index.html)) for dynamic Control Flow Graph (CFG) recovery from binaries. Supports x86, x86-64, MIPS, MIPSEL, and PPC.
+Multi-threaded, per-process tracing using an intermediate language (currently [Falcon IL](https://docs.rs/falcon/0.4.12/falcon/il/index.html)) for dynamic Control Flow Graph (CFG) recovery from binaries. Does not require any input information (e.g. debug symbols, locations of call/jump sites). Supports x86, x86-64, MIPS, MIPSEL, and PPC.
 
 ### How does this work?
 
@@ -93,8 +93,13 @@ $PANDA_PATH/x86_64-softmmu/panda-system-x86_64 \
     -panda il_trace:proc_name=some_process,debug=1,trace_lib=1,pretty_json=1
 ```
 
-TODO
-------------------
+## Tests
+
+```
+cargo test --features bin -- --show-output
+```
+
+## TODO
 
 * Unit tests for non-x86 arches
 * Integration test for accuracy verification against DWARF symbols
