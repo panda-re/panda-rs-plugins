@@ -120,7 +120,7 @@ impl BasicBlock {
         &mut self.branch
     }
 
-    /// Lift BB to IR, caches successes so multiple calls won't re-lift
+    /// Lift BB to IR, caches successes so multiple calls won't re-lift.
     /// This is not done by the constructor so that the work can be deferred for multi-threading.
     pub fn lift(&mut self) -> &Option<ControlFlowGraph> {
         if self.translation.is_none() {
@@ -252,10 +252,14 @@ impl BasicBlock {
                                                     match Self::resolve_reg_indirect(&block, &reg) {
                                                         Some(val) => val,
                                                         // Mem far jump, e.g. jmp [rip+0x3f1b32]
-                                                        None => return Some(Branch::DirectJumpSentinel {
-                                                            site_pc,
-                                                            seq_num: self.seq_num
-                                                        }),
+                                                        None => {
+                                                            return Some(
+                                                                Branch::DirectJumpSentinel {
+                                                                    site_pc,
+                                                                    seq_num: self.seq_num,
+                                                                },
+                                                            )
+                                                        }
                                                     }
                                                 }
                                                 false => reg,
@@ -270,7 +274,7 @@ impl BasicBlock {
                                                     });
                                                 }
                                                 false => {
-                                                    return Some(Branch::JumpSentinel {
+                                                    return Some(Branch::IndirectJumpSentinel {
                                                         site_pc,
                                                         seq_num: self.seq_num,
                                                         reg: String::from(ind_reg.name()),

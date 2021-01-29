@@ -231,7 +231,7 @@ mod tests {
         );
         assert_eq!(
             jmp_ind_bb.find_branch(),
-            Some(Branch::JumpSentinel {
+            Some(Branch::IndirectJumpSentinel {
                 site_pc: 6,
                 seq_num: 0,
                 reg: "rax".to_string()

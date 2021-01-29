@@ -53,7 +53,7 @@ impl BasicBlockList {
                             dst_pc: actual_dst_pc,
                         };
                     }
-                    Branch::JumpSentinel {
+                    Branch::IndirectJumpSentinel {
                         site_pc,
                         seq_num,
                         reg,
@@ -72,9 +72,9 @@ impl BasicBlockList {
                         *branch = Branch::DirectJump {
                             site_pc: *site_pc,
                             dst_pc: actual_dst_pc,
-                            taken: true
+                            taken: true,
                         };
-                    },
+                    }
                     Branch::DirectJump {
                         site_pc,
                         dst_pc,

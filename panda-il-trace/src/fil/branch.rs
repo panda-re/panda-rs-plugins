@@ -30,7 +30,7 @@ pub enum Branch {
         seq_num: usize,
         reg: String,
     },
-    JumpSentinel {
+    IndirectJumpSentinel {
         site_pc: u64,
         seq_num: usize,
         reg: String,
@@ -93,17 +93,21 @@ impl fmt::Display for Branch {
                 "CallSentinel@0x{:016x} [{}], seq_num: {}",
                 site_pc, reg, seq_num
             ),
-            Branch::JumpSentinel {
+            Branch::IndirectJumpSentinel {
                 site_pc,
                 seq_num,
                 reg,
             } => write!(
                 f,
-                "JumpSentinel@0x{:016x} [{}], seq_num: {}",
+                "IndirectJumpSentinel@0x{:016x} [{}], seq_num: {}",
                 site_pc, reg, seq_num
             ),
             Branch::DirectJumpSentinel { site_pc, seq_num } => {
-                write!(f, "DirectJumpSentinel@0x{:016x}, seq_num: {}", site_pc, seq_num)
+                write!(
+                    f,
+                    "DirectJumpSentinel@0x{:016x}, seq_num: {}",
+                    site_pc, seq_num
+                )
             }
             Branch::ReturnSentinel { site_pc, seq_num } => {
                 write!(f, "ReturnSentinel@0x{:016x}, seq_num: {}", site_pc, seq_num)
