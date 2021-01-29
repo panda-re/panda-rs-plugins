@@ -3,7 +3,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use super::{BasicBlock, Branch, RET_MARKER};
+use super::{BasicBlock, Branch};
 
 /// Final trace representation, for serialization.
 #[derive(Debug, Clone, Serialize)]
@@ -22,7 +22,6 @@ impl BasicBlockList {
         // Resolution via looking at next BB executed
         let list_len = list.len();
         for idx in 0..list_len {
-
             let next_idx = idx + 1;
             if next_idx >= list_len {
                 break;
@@ -36,39 +35,43 @@ impl BasicBlockList {
                     Branch::CallSentinel {
                         site_pc,
                         seq_num,
-                        reg_or_ret,
+                        reg,
                     } => {
                         assert!(next_seq == (*seq_num + 1));
 
-                        if reg_or_ret == RET_MARKER {
-                            *branch = Branch::Return { site_pc: *site_pc, dst_pc: actual_dst_pc };
-                        } else {
-                            *branch = Branch::IndirectCall {
-                                site_pc: *site_pc,
-                                dst_pc: actual_dst_pc,
-                                reg_used: reg_or_ret.to_string(),
-                            };
-                        }
+                        *branch = Branch::IndirectCall {
+                            site_pc: *site_pc,
+                            dst_pc: actual_dst_pc,
+                            reg_used: reg.to_string(),
+                        };
+                    }
+                    Branch::ReturnSentinel { site_pc, seq_num } => {
+                        assert!(next_seq == (*seq_num + 1));
+
+                        *branch = Branch::Return {
+                            site_pc: *site_pc,
+                            dst_pc: actual_dst_pc,
+                        };
                     }
                     Branch::JumpSentinel {
                         site_pc,
                         seq_num,
-                        reg_or_ret,
+                        reg,
                     } => {
                         assert!(next_seq == (*seq_num + 1));
 
                         *branch = Branch::IndirectJump {
                             site_pc: *site_pc,
                             dst_pc: actual_dst_pc,
-                            reg_used: reg_or_ret.to_string(),
+                            reg_used: reg.to_string(),
                         };
                     }
                     Branch::DirectJump {
                         site_pc,
                         dst_pc,
-                        taken
+                        taken: _,
                     } => {
-                        let actual_taken = (actual_dst_pc == *dst_pc);
+                        let actual_taken = actual_dst_pc == *dst_pc;
                         *branch = Branch::DirectJump {
                             site_pc: *site_pc,
                             dst_pc: *dst_pc,

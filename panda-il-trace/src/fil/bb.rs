@@ -1,18 +1,13 @@
 use std::fmt;
 
 use falcon::architecture::Architecture;
-use falcon::il::Expression::{Constant, Scalar};
-use falcon::il::{ControlFlowGraph, Operation};
+use falcon::il::Expression::{Constant, Scalar as ExpScalar};
+use falcon::il::{ControlFlowGraph, Instruction, Operation, Scalar};
 use falcon::translator;
 use falcon::translator::Translator;
 use serde::Serialize;
 
-#[cfg(any(feature = "arm", feature = "ppc", feature = "mips", feature = "mipsel"))]
-use falcon::il::Scalar as OtherScalar;
-
 use super::Branch;
-
-pub static RET_MARKER: &'static str = "<RETURN>";
 
 /// Guest basic block, can map to TCG/LLVM execution delimiters (e.g. subset of static BB in ELF/PE)
 #[derive(Debug, Clone, Serialize)]
@@ -62,7 +57,6 @@ impl BasicBlock {
 
     /// Constructor, takes ownership of BB bytes to avoid copy
     pub fn new_zero_copy(seq_num: usize, pc: u64, bytes: Vec<u8>) -> Self {
-
         #[cfg(feature = "arm")]
         panic!("ARM is not supported by the Falcon IR! :(");
 
@@ -160,9 +154,11 @@ impl BasicBlock {
                     for (idx, instr) in block.instructions().iter().enumerate() {
                         match (instr.operation(), instr.address()) {
                             (Operation::Branch { target }, Some(site_pc)) => {
-                                // Falcon doesn't differentiate calls from jumps at the IL level
+                                // Falcon doesn't differentiate calls/rets from jumps at the IL level
                                 // This means we have to encode architecture-specific side effects here :(
                                 let mut is_call = false;
+                                let mut is_ret = false;
+
                                 if idx > 0 {
                                     let prev_instr = &block.instructions()[idx - 1];
 
@@ -174,9 +170,14 @@ impl BasicBlock {
                                         #[cfg(feature = "i386")]
                                         let sp = falcon::architecture::X86::new().stack_pointer();
 
-                                        if let Some(regs) = prev_instr.scalars_read() {
-                                            if regs.contains(&&sp) && prev_instr.is_store() {
-                                                is_call = true;
+                                        is_call = Self::stores_reg(&prev_instr, &sp);
+
+                                        if idx > 1 && (!is_call) {
+                                            let prev_prev_instr = &block.instructions()[idx - 2];
+                                            if Self::loads_reg(&prev_prev_instr, &sp)
+                                                || Self::loads_reg(&prev_instr, &sp)
+                                            {
+                                                is_ret = true;
                                             }
                                         }
                                     }
@@ -189,7 +190,7 @@ impl BasicBlock {
                                     ))]
                                     {
                                         if let Some(link_reg) = panda::reg_ret_addr() {
-                                            let link_reg_scalar = OtherScalar::new(
+                                            let link_reg_scalar = Scalar::new(
                                                 link_reg.to_string().to_lowercase(),
                                                 32,
                                             );
@@ -226,13 +227,12 @@ impl BasicBlock {
 
                                     // Indirect call, jump, or return
                                     // PC of the next BB executed is dest, fill sentinel with sequence number
-                                    Scalar(reg) => {
+                                    ExpScalar(reg) => {
                                         // TODO: is there a better way to differentiate returns from indirect calls?
-                                        if reg.name().contains("temp") {
-                                            return Some(Branch::CallSentinel {
+                                        if reg.name().contains("temp") && is_ret {
+                                            return Some(Branch::ReturnSentinel {
                                                 site_pc,
                                                 seq_num: self.seq_num,
-                                                reg_or_ret: String::from(RET_MARKER),
                                             });
                                         } else {
                                             match is_call {
@@ -240,14 +240,14 @@ impl BasicBlock {
                                                     return Some(Branch::CallSentinel {
                                                         site_pc,
                                                         seq_num: self.seq_num,
-                                                        reg_or_ret: String::from(reg.name()),
+                                                        reg: String::from(reg.name()),
                                                     });
                                                 }
                                                 false => {
                                                     return Some(Branch::JumpSentinel {
                                                         site_pc,
                                                         seq_num: self.seq_num,
-                                                        reg_or_ret: String::from(reg.name()),
+                                                        reg: String::from(reg.name()),
                                                     });
                                                 }
                                             }
@@ -266,6 +266,28 @@ impl BasicBlock {
             }
             None => None,
         }
+    }
+
+    // Does instruction load a register?
+    fn loads_reg(instr: &Instruction, reg: &Scalar) -> bool {
+        if let Some(regs) = instr.scalars_read() {
+            if regs.contains(&reg) && instr.is_load() {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    // Does instruction store a register?
+    fn stores_reg(instr: &Instruction, reg: &Scalar) -> bool {
+        if let Some(regs) = instr.scalars_read() {
+            if regs.contains(&reg) && instr.is_store() {
+                return true;
+            }
+        }
+
+        false
     }
 }
 

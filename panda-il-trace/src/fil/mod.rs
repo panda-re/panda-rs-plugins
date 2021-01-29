@@ -43,10 +43,9 @@ mod tests {
         println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
         assert_eq!(
             ret_bb.find_branch(),
-            Some(Branch::CallSentinel {
+            Some(Branch::ReturnSentinel {
                 site_pc: 0,
-                seq_nuum: 0,
-                ret_or_reg: RET_MARKER.to_string()
+                seq_num: 0,
             })
         );
     }
@@ -75,7 +74,34 @@ mod tests {
             Some(Branch::CallSentinel {
                 site_pc: 6,
                 seq_num: 0,
-                reg_or_ret: "rax".to_string()
+                reg: "rax".to_string()
+            })
+        );
+    }
+
+    #[cfg(feature = "x86_64")]
+    #[test]
+    fn test_x64_call_indirect_2() {
+        #[rustfmt::skip]
+        let call_ind_encoding: [u8; 8] = [
+            0x48, 0x89, 0xdf,               // mov rdi, rbx
+            0x41, 0xff, 0x54, 0x24, 0x60    // call [r12+0x60]
+        ];
+
+        let mut call_ind_bb = BasicBlock::new(0, 0, &call_ind_encoding);
+        call_ind_bb.lift();
+        assert!(call_ind_bb.translation().is_some());
+        println!(
+            "CALL_IND -> {:x?}\n\n{}",
+            call_ind_bb.find_branch(),
+            call_ind_bb
+        );
+        assert_eq!(
+            call_ind_bb.find_branch(),
+            Some(Branch::CallSentinel {
+                site_pc: 3,
+                seq_num: 0,
+                reg: "r12".to_string()
             })
         );
     }
@@ -125,10 +151,9 @@ mod tests {
         println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
         assert_eq!(
             ret_bb.find_branch(),
-            Some(Branch::CallSentinel {
+            Some(Branch::ReturnSentinel {
                 site_pc: 6,
                 seq_num: 0,
-                reg_or_ret: RET_MARKER.to_string()
             })
         );
     }
@@ -184,7 +209,7 @@ mod tests {
             Some(Branch::JumpSentinel {
                 site_pc: 6,
                 seq_num: 0,
-                reg_or_ret: "rax".to_string()
+                reg: "rax".to_string()
             })
         );
     }
@@ -240,7 +265,7 @@ mod tests {
         assert!(ret_bb.translation().is_some());
         assert!(ret_bb.branch().is_some());
 
-        let expected = "{\"seq_num\":1,\"pc\":4919,\"branch\":{\"CallSentinel\":{\"site_pc\":4925,\"seq_num\":1,\"reg_or_ret\":\"<RETURN>\"}}}";
+        let expected = "{\"seq_num\":1,\"pc\":4919,\"branch\":{\"ReturnSentinel\":{\"site_pc\":4925,\"seq_num\":1}}}";
         let actual = serde_json::to_string(&ret_bb).unwrap();
         println!("{}", actual);
         assert_eq!(expected, actual);
