@@ -13,8 +13,8 @@ use panda::prelude::*;
 
 // Exports -------------------------------------------------------------------------------------------------------------
 
-pub mod il;
-pub use crate::il::*;
+pub mod fil;
+pub use crate::fil::*;
 
 // Globals -------------------------------------------------------------------------------------------------------------
 
@@ -25,11 +25,11 @@ lazy_static! {
 }
 
 lazy_static! {
-    static ref BBQ_IN: SegQueue<il::BasicBlock> = SegQueue::new();
+    static ref BBQ_IN: SegQueue<fil::BasicBlock> = SegQueue::new();
 }
 
 lazy_static! {
-    static ref BBQ_OUT: SegQueue<il::BasicBlock> = SegQueue::new();
+    static ref BBQ_OUT: SegQueue<fil::BasicBlock> = SegQueue::new();
 }
 
 lazy_static! {
@@ -174,7 +174,7 @@ fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock, exit_code: u
             }
 
             if let Ok(bytes) = panda::virtual_memory_read(cpu, tb.pc, tb.size.into()) {
-                let bb = il::BasicBlock::new_zero_copy(
+                let bb = fil::BasicBlock::new_zero_copy(
                     BB_NUM.fetch_add(1, Ordering::SeqCst),
                     tb.pc as u64,
                     bytes,
