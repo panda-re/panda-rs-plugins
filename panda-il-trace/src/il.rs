@@ -109,8 +109,10 @@ impl fmt::Display for Branch {
 pub struct BasicBlock {
     seq_num: usize,
     pc: u64,
-    bytes: Vec<u8>,
     branch: Option<Branch>,
+
+    #[serde(skip)]
+    bytes: Vec<u8>,
 
     #[serde(skip)]
     translation: Option<ControlFlowGraph>,

@@ -24,7 +24,6 @@ num_cpus = "1.13.0"
 rayon = "1.5.0"
 serde = {version = "1", features = ["derive"] }
 serde_json = "1"
-ruut  = "0.6"
 falcon = { version = "0.4.12", features = ["capstone4"] }
 
 [features]

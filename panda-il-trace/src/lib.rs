@@ -16,9 +16,6 @@ use panda::prelude::*;
 pub mod il;
 pub use crate::il::*;
 
-pub mod callstack;
-pub use crate::callstack::*;
-
 // Globals -------------------------------------------------------------------------------------------------------------
 
 static BB_NUM: AtomicUsize = AtomicUsize::new(0);
@@ -53,9 +50,6 @@ struct Args {
     #[arg(default = "il_trace.json", about = "File to log trace results (JSON)")]
     out_trace_file: String,
 
-    #[arg(default = "callstack.txt", about = "File to dump callstack (TXT)")]
-    out_callstack_file: String,
-
     #[arg(about = "If set, add whitespace to JSON (larger file)")]
     pretty_json: bool,
 
@@ -72,7 +66,6 @@ impl Default for Args {
         Self {
             proc_name: "init".to_string(),
             out_trace_file: "il_trace.json".to_string(),
-            out_callstack_file: "callstack.txt".to_string(),
             debug: false,
             trace_lib: true,
             pretty_json: false,
@@ -154,9 +147,6 @@ fn uninit(_: &mut PluginHandle) {
     bb_list
         .to_branch_json(&ARGS.out_trace_file, ARGS.pretty_json)
         .expect("trace file write failed!");
-
-    println!("Writing callstack to to \'{}\'...", ARGS.out_callstack_file);
-    to_callstack_file(&bb_list, &ARGS.out_callstack_file).expect("callstack file write failed!");
 
     process::exit(0);
 }
