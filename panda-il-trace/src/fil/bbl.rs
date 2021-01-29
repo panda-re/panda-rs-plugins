@@ -66,6 +66,15 @@ impl BasicBlockList {
                             reg_used: reg.to_string(),
                         };
                     }
+                    Branch::DirectJumpSentinel { site_pc, seq_num } => {
+                        assert!(next_seq == (*seq_num + 1));
+
+                        *branch = Branch::DirectJump {
+                            site_pc: *site_pc,
+                            dst_pc: actual_dst_pc,
+                            taken: true
+                        };
+                    },
                     Branch::DirectJump {
                         site_pc,
                         dst_pc,

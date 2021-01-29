@@ -2,7 +2,7 @@ use std::fmt;
 
 use falcon::architecture::Architecture;
 use falcon::il::Expression::{Constant, Scalar as ExpScalar};
-use falcon::il::{ControlFlowGraph, Instruction, Operation, Scalar};
+use falcon::il::{Block, ControlFlowGraph, Instruction, Operation, Scalar};
 use falcon::translator;
 use falcon::translator::Translator;
 use serde::Serialize;
@@ -156,12 +156,14 @@ impl BasicBlock {
                             (Operation::Branch { target }, Some(site_pc)) => {
                                 // Falcon doesn't differentiate calls/rets from jumps at the IL level
                                 // This means we have to encode architecture-specific side effects here :(
-                                let mut is_call = false;
-                                let mut is_ret = false;
+                                let mut maybe_call = false;
+                                let mut maybe_ret = false;
 
                                 if idx > 0 {
                                     let prev_instr = &block.instructions()[idx - 1];
 
+                                    // call -> SP-offset write
+                                    // ret -> SP-offset read
                                     #[cfg(any(feature = "i386", feature = "x86_64"))]
                                     {
                                         #[cfg(feature = "x86_64")]
@@ -170,18 +172,20 @@ impl BasicBlock {
                                         #[cfg(feature = "i386")]
                                         let sp = falcon::architecture::X86::new().stack_pointer();
 
-                                        is_call = Self::stores_reg(&prev_instr, &sp);
+                                        maybe_call = Self::stores_reg(&prev_instr, &sp);
 
-                                        if idx > 1 && (!is_call) {
+                                        if idx > 1 && (!maybe_call) {
                                             let prev_prev_instr = &block.instructions()[idx - 2];
                                             if Self::loads_reg(&prev_prev_instr, &sp)
                                                 || Self::loads_reg(&prev_instr, &sp)
                                             {
-                                                is_ret = true;
+                                                maybe_ret = true;
                                             }
                                         }
                                     }
 
+                                    // call -> LR write
+                                    // ret -> LR read
                                     #[cfg(any(
                                         feature = "arm",
                                         feature = "ppc",
@@ -194,20 +198,28 @@ impl BasicBlock {
                                                 link_reg.to_string().to_lowercase(),
                                                 32,
                                             );
+
                                             if let Some(regs) = prev_instr.scalars_written() {
                                                 if regs.contains(&&link_reg_scalar) {
-                                                    is_call = true;
+                                                    maybe_call = true;
+                                                }
+                                            }
+
+                                            if let Some(regs) = prev_instr.scalars_read() {
+                                                if regs.contains(&&link_reg_scalar) {
+                                                    maybe_ret = true;
                                                 }
                                             }
                                         }
                                     }
                                 }
 
+                                assert!(!(maybe_ret && maybe_call));
                                 match target {
                                     // Direct call or jump
                                     Constant(addr) => {
                                         if let Some(dst_pc) = addr.value_u64() {
-                                            match is_call {
+                                            match maybe_call {
                                                 true => {
                                                     return Some(Branch::DirectCall {
                                                         site_pc,
@@ -228,32 +240,45 @@ impl BasicBlock {
                                     // Indirect call, jump, or return
                                     // PC of the next BB executed is dest, fill sentinel with sequence number
                                     ExpScalar(reg) => {
-                                        // TODO: is there a better way to differentiate returns from indirect calls?
-                                        if reg.name().contains("temp") && is_ret {
+                                        if maybe_ret {
                                             return Some(Branch::ReturnSentinel {
                                                 site_pc,
                                                 seq_num: self.seq_num,
                                             });
                                         } else {
-                                            match is_call {
+                                            let ind_reg = match reg.name().contains("temp") {
+                                                // Mem computed call, e.g. call [r12+0x60]
+                                                true => {
+                                                    match Self::resolve_reg_indirect(&block, &reg) {
+                                                        Some(val) => val,
+                                                        // Mem far jump, e.g. jmp [rip+0x3f1b32]
+                                                        None => return Some(Branch::DirectJumpSentinel {
+                                                            site_pc,
+                                                            seq_num: self.seq_num
+                                                        }),
+                                                    }
+                                                }
+                                                false => reg,
+                                            };
+
+                                            match maybe_call {
                                                 true => {
                                                     return Some(Branch::CallSentinel {
                                                         site_pc,
                                                         seq_num: self.seq_num,
-                                                        reg: String::from(reg.name()),
+                                                        reg: String::from(ind_reg.name()),
                                                     });
                                                 }
                                                 false => {
                                                     return Some(Branch::JumpSentinel {
                                                         site_pc,
                                                         seq_num: self.seq_num,
-                                                        reg: String::from(reg.name()),
+                                                        reg: String::from(ind_reg.name()),
                                                     });
                                                 }
                                             }
                                         }
                                     }
-
                                     _ => continue,
                                 }
                             }
@@ -288,6 +313,31 @@ impl BasicBlock {
         }
 
         false
+    }
+
+    // What register is the scalar derived from?
+    fn resolve_reg_indirect<'a>(block: &'a Block, scalar: &Scalar) -> Option<&'a Scalar> {
+        for instr in block.instructions().iter().rev() {
+            match instr.operation() {
+                Operation::Assign { dst, src } => {
+                    if dst == scalar {
+                        if let Some(reg) = src.scalars().first() {
+                            return Some(reg);
+                        }
+                    }
+                }
+                Operation::Load { dst, index } => {
+                    if dst == scalar {
+                        if let Some(reg) = index.scalars().first() {
+                            return Some(reg);
+                        }
+                    }
+                }
+                _ => continue,
+            }
+        }
+
+        None
     }
 }
 

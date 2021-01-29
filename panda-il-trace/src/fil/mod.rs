@@ -176,7 +176,7 @@ mod tests {
         jmp_imm_bb.lift();
         assert!(jmp_imm_bb.translation().is_some());
         println!(
-            "JMP_IMM -> {:x?}\n\n{}",
+            "JMP_DIR -> {:x?}\n\n{}",
             jmp_imm_bb.find_branch(),
             jmp_imm_bb
         );
@@ -184,6 +184,31 @@ mod tests {
 
     }
     */
+
+    #[cfg(feature = "x86_64")]
+    #[test]
+    fn test_x64_jump_direct_2() {
+        #[rustfmt::skip]
+        let jmp_dir_encoding: [u8; 6] = [
+            0xff, 0x25, 0x32, 0x1b, 0x3f, 0x00  // jmp [rip+0x3f1b32]
+        ];
+
+        let mut jmp_ind_bb = BasicBlock::new(0, 0, &jmp_dir_encoding);
+        jmp_ind_bb.lift();
+        assert!(jmp_ind_bb.translation().is_some());
+        println!(
+            "JMP_DIR -> {:x?}\n\n{}",
+            jmp_ind_bb.find_branch(),
+            jmp_ind_bb
+        );
+        assert_eq!(
+            jmp_ind_bb.find_branch(),
+            Some(Branch::DirectJumpSentinel {
+                site_pc: 0,
+                seq_num: 0,
+            })
+        );
+    }
 
     #[cfg(feature = "x86_64")]
     #[test]
