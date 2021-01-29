@@ -13,6 +13,7 @@ pub enum Branch {
     DirectJump {
         site_pc: u64,
         dst_pc: u64,
+        taken: bool,
     },
     IndirectCall {
         site_pc: u64,
@@ -46,8 +47,8 @@ impl fmt::Display for Branch {
             Branch::DirectCall { site_pc, dst_pc } => {
                 write!(f, "DirectCall@0x{:016x} -> 0x{:016x}", site_pc, dst_pc)
             }
-            Branch::DirectJump { site_pc, dst_pc } => {
-                write!(f, "DirectJump@0x{:016x} -> 0x{:016x}", site_pc, dst_pc)
+            Branch::DirectJump { site_pc, dst_pc, taken} => {
+                write!(f, "DirectJump@0x{:016x} -> 0x{:016x} [taken: {}]", site_pc, dst_pc, taken)
             }
             Branch::IndirectCall {
                 site_pc,

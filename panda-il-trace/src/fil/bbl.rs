@@ -5,38 +5,32 @@ use serde::Serialize;
 
 use super::{BasicBlock, Branch, RET_MARKER};
 
-/// Final brace representation, for serialization
+/// Final trace representation, for serialization.
 #[derive(Debug, Clone, Serialize)]
 pub struct BasicBlockList {
     list: Vec<BasicBlock>,
 }
 
 impl BasicBlockList {
-    /// Constructor
+    /// Constructor, resolves:
+    /// * Indirect call/jump and return destinations
+    /// * Conditional jump taken or not taken
     pub fn from(mut list: Vec<BasicBlock>) -> BasicBlockList {
-        // Guest execution order sort
+        // Guest execution order sort (via atomic sequence number)
         list.sort_unstable_by_key(|bb| bb.seq_num());
 
-        // Determine indirect call/jump destinations
-        //for bb_chunk in list.chunks_exact_mut(2) {
+        // Resolution via looking at next BB executed
         let list_len = list.len();
         for idx in 0..list_len {
-            //let dst_pc = bb_chunk[1].pc();
-            //let next_seq = bb_chunk[1].seq_num();
-            //let curr_seq = bb_chunk[0].seq_num();
 
             let next_idx = idx + 1;
             if next_idx >= list_len {
                 break;
             }
 
-            let dst_pc = list[next_idx].pc();
+            let actual_dst_pc = list[next_idx].pc();
             let next_seq = list[next_idx].seq_num();
-            //let curr_seq = list[idx].seq_num();
 
-            //println!("Processing {} and {}", curr_seq, next_seq);
-
-            //if let Some(branch) = bb_chunk[0].branch_mut() {
             if let Some(branch) = list[idx].branch_mut() {
                 match branch {
                     Branch::CallSentinel {
@@ -45,14 +39,13 @@ impl BasicBlockList {
                         reg_or_ret,
                     } => {
                         assert!(next_seq == (*seq_num + 1));
-                        let site_pc = *site_pc;
 
                         if reg_or_ret == RET_MARKER {
-                            *branch = Branch::Return { site_pc, dst_pc };
+                            *branch = Branch::Return { site_pc: *site_pc, dst_pc: actual_dst_pc };
                         } else {
                             *branch = Branch::IndirectCall {
-                                site_pc,
-                                dst_pc,
+                                site_pc: *site_pc,
+                                dst_pc: actual_dst_pc,
                                 reg_used: reg_or_ret.to_string(),
                             };
                         }
@@ -63,12 +56,23 @@ impl BasicBlockList {
                         reg_or_ret,
                     } => {
                         assert!(next_seq == (*seq_num + 1));
-                        let site_pc = *site_pc;
 
                         *branch = Branch::IndirectJump {
-                            site_pc,
-                            dst_pc,
+                            site_pc: *site_pc,
+                            dst_pc: actual_dst_pc,
                             reg_used: reg_or_ret.to_string(),
+                        };
+                    }
+                    Branch::DirectJump {
+                        site_pc,
+                        dst_pc,
+                        taken
+                    } => {
+                        let actual_taken = (actual_dst_pc == *dst_pc);
+                        *branch = Branch::DirectJump {
+                            site_pc: *site_pc,
+                            dst_pc: *dst_pc,
+                            taken: actual_taken,
                         };
                     }
                     _ => continue,

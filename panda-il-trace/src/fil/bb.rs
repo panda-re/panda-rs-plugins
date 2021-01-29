@@ -46,6 +46,12 @@ pub struct BasicBlock {
     #[cfg(feature = "ppc")]
     #[serde(skip)]
     translator: translator::ppc::Ppc,
+
+    // This is a dummy so the plugin compiles for ARM
+    // Falcon IR doesn't support ARM, will panic at runtime.
+    #[cfg(feature = "arm")]
+    #[serde(skip)]
+    translator: translator::ppc::Ppc,
 }
 
 impl BasicBlock {
@@ -56,6 +62,10 @@ impl BasicBlock {
 
     /// Constructor, takes ownership of BB bytes to avoid copy
     pub fn new_zero_copy(seq_num: usize, pc: u64, bytes: Vec<u8>) -> Self {
+
+        #[cfg(feature = "arm")]
+        panic!("ARM is not supported by the Falcon IR! :(");
+
         #[cfg(feature = "i386")]
         let translator = translator::x86::X86::new();
 
@@ -207,6 +217,7 @@ impl BasicBlock {
                                                     return Some(Branch::DirectJump {
                                                         site_pc,
                                                         dst_pc,
+                                                        taken: false,
                                                     })
                                                 }
                                             }
