@@ -57,6 +57,9 @@ impl BasicBlock {
 
     /// Constructor, takes ownership of BB bytes to avoid copy
     pub fn new_zero_copy(seq_num: usize, pc: u64, bytes: Vec<u8>) -> Self {
+
+        // TODO: panic -> compile_error
+        // TODO: CI knowledge of arch features, so this plugin compiling is not a CI failure
         #[cfg(feature = "arm")]
         panic!("ARM is not supported by the Falcon IR! :(");
 
@@ -156,6 +159,8 @@ impl BasicBlock {
                             (Operation::Branch { target }, Some(site_pc)) => {
                                 // Falcon doesn't differentiate calls/rets from jumps at the IL level
                                 // This means we have to encode architecture-specific side effects here :(
+
+                                // TODO: single assignment path, change to let maybe_*;
                                 let mut maybe_call = false;
                                 let mut maybe_ret = false;
 

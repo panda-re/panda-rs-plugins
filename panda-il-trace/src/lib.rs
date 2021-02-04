@@ -4,10 +4,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 
-#[macro_use]
-extern crate lazy_static;
-
+use lazy_static::lazy_static;
 use crossbeam::queue::SegQueue;
+
 use panda::plugins::osi::OSI;
 use panda::prelude::*;
 
@@ -24,10 +23,14 @@ lazy_static! {
     static ref ARGS: Args = Args::from_panda_args();
 }
 
+// Producer: after basic block callback
+// Consumer: worker threads
 lazy_static! {
     static ref BBQ_IN: SegQueue<fil::BasicBlock> = SegQueue::new();
 }
 
+// Producer: worker threads
+// Consumer: uninit plugin
 lazy_static! {
     static ref BBQ_OUT: SegQueue<fil::BasicBlock> = SegQueue::new();
 }
@@ -60,6 +63,7 @@ struct Args {
     debug: bool,
 }
 
+// TODO: unused if no arg name provided on command line?
 // TODO: can this be macro-ed if every arg has a default?
 impl Default for Args {
     fn default() -> Self {
