@@ -1,6 +1,6 @@
 # Rusty PANDA plugins
 
-A collection of plugins for PANDA written in Rust.
+A collection of plugins for PANDA written in Rust. See [getting started guide](./GETTING_STARTED.md).
 
 ## panda-gdb
 
