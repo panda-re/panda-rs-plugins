@@ -20,9 +20,9 @@ If you cloned the PANDA repo in your home directory before building and your `pa
 export PANDA_PATH="/home/user_name/panda/build/"
 ```
 
-You can make setting persistant by adding the above line to your `~/.bashrc`, updating `/etc/environment`, or whatever configuration your shell uses.
+You can make this setting persistent by adding the above line to your `~/.bashrc`, updating `/etc/environment`, or whatever configuration your shell uses.
 
-You're now ready to build Rust plugins! From a Rust plugin's directory, running `cargo build` will build the plugin. The `.so` file can be found under `<plugin_directory>/target/debug/lib<panda_name>.so`.
+You're now ready to build Rust plugins! From a Rust plugin's directory, running `cargo build` will build the plugin. The `.so` file can be found under `<plugin_directory>/target/debug/lib<plugin_name>.so`.
 
 ## Example: `panda-il-trace`
 
