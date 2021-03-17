@@ -83,6 +83,15 @@ Example excerpt of conditional jump tracking. Notice determination of whether or
 
 * `osi`
 
+### Setup
+
+Currently, this uses a different `caponstone` version than PANDA. Install it with
+
+```
+cd panda-il-trace
+bash ./setup.sh
+```
+
 ## APIs and Callbacks
 
 TODO - `panda-rs` doesn't yet support PPP callbacks.
@@ -105,6 +114,8 @@ cargo test --features bin -- --show-output
 
 ## TODO
 
+**Warning:** This currently a beta-quality plugin, it hasn't yet been tested extensively.
+
 * Unit tests for non-x86 arches
 * Integration test for accuracy verification against DWARF symbols
 * Translation caching support
@@ -112,5 +123,6 @@ cargo test --features bin -- --show-output
 * PPP callbacks:
     * `on_ret`
     * `on_call`
-    * `on_jmp_indirect`
+    * `on_branch_direct`
+    * `on_branch_indirect`
 * Ghidra importer that automates finding/labeling more code in the binary

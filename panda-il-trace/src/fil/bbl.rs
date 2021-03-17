@@ -19,7 +19,7 @@ impl BasicBlockList {
         // Guest execution order sort (via atomic sequence number)
         list.sort_unstable_by_key(|bb| bb.seq_num());
 
-        // TODO: update to Vec::windows API
+        // NOTE: cannot use slice::windows(2) b/c need to mutate prev BB
         // Resolution via looking at next BB executed
         let list_len = list.len();
         for idx in 0..list_len {
