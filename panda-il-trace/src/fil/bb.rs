@@ -14,6 +14,7 @@ use super::Branch;
 pub struct BasicBlock {
     seq_num: usize,
     pc: u64,
+    asid: u64,
     branch: Option<Branch>,
 
     #[serde(skip)]
@@ -51,12 +52,12 @@ pub struct BasicBlock {
 
 impl BasicBlock {
     /// Constructor, copies bytes from parameter slice
-    pub fn new(seq_num: usize, pc: u64, bytes: &[u8]) -> Self {
-        BasicBlock::new_zero_copy(seq_num, pc, bytes.to_vec())
+    pub fn new(seq_num: usize, pc: u64, asid: u64, bytes: &[u8]) -> Self {
+        BasicBlock::new_zero_copy(seq_num, pc, asid, bytes.to_vec())
     }
 
     /// Constructor, takes ownership of BB bytes to avoid copy
-    pub fn new_zero_copy(seq_num: usize, pc: u64, bytes: Vec<u8>) -> Self {
+    pub fn new_zero_copy(seq_num: usize, pc: u64, asid: u64, bytes: Vec<u8>) -> Self {
 
         // TODO: panic -> compile_error
         // TODO: CI knowledge of arch features, so this plugin compiling is not a CI failure
@@ -81,6 +82,7 @@ impl BasicBlock {
         BasicBlock {
             seq_num,
             pc,
+            asid,
             bytes,
             translator,
             translation: None,

@@ -180,6 +180,7 @@ fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock, exit_code: u
             if let Ok(bytes) = panda::virtual_memory_read(cpu, tb.pc, tb.size.into()) {
                 let bb = fil::BasicBlock::new_zero_copy(
                     BB_NUM.fetch_add(1, Ordering::SeqCst),
+                    panda::current_asid(cpu) as u64,
                     tb.pc as u64,
                     bytes,
                 );

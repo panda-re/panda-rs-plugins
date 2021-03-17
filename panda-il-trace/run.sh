@@ -16,6 +16,6 @@ if [[ ! -f "$RR_FILE" ]] || [[ ! -f "$RR_ND_LOG" ]]; then
     exit 1
 fi
 
-cargo build && \
-    cp ../target/debug/libpanda_il_trace.so $PANDA_PATH/x86_64-softmmu/panda/plugins/panda_il_trace.so && \
+cargo build --release && \
+    cp ../target/release/libpanda_il_trace.so $PANDA_PATH/x86_64-softmmu/panda/plugins/panda_il_trace.so && \
     $PANDA_PATH/x86_64-softmmu/panda-system-x86_64 -os "linux-64-ubuntu:4.15.0-72-generic-noaslr-nokaslr" -replay $REC_NAME -panda il_trace:proc_name=$PROC_NAME,debug=1,trace_lib=1,pretty_json=1 -m 1G

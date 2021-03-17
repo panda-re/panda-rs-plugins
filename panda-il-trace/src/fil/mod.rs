@@ -12,6 +12,8 @@ pub use bbl::*;
 mod tests {
     use super::*;
 
+    static DUMMY_ASID: u64 = 0xDEADBEEF;
+
     // TODO: tests for MIPS and PPC
 
     // TODO: finish/expand/run this test
@@ -37,7 +39,7 @@ mod tests {
             })
         );
 
-        let mut ret_bb = BasicBlock::new(0, 0, &ret_encoding);
+        let mut ret_bb = BasicBlock::new(0, 0, DUMMY_ASID, &ret_encoding);
         ret_bb.lift();
         assert!(ret_bb.translation().is_some());
         println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
@@ -61,7 +63,7 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
-        let mut call_ind_bb = BasicBlock::new(0, 0, &call_ind_encoding);
+        let mut call_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, &call_ind_encoding);
         call_ind_bb.lift();
         assert!(call_ind_bb.translation().is_some());
         println!(
@@ -88,7 +90,7 @@ mod tests {
             0x41, 0xff, 0x54, 0x24, 0x60    // call [r12+0x60]
         ];
 
-        let mut call_ind_bb = BasicBlock::new(0, 0, &call_ind_encoding);
+        let mut call_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, &call_ind_encoding);
         call_ind_bb.lift();
         assert!(call_ind_bb.translation().is_some());
         println!(
@@ -117,7 +119,7 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
-        let mut call_imm_bb = BasicBlock::new(0, 0, &call_imm_encoding);
+        let mut call_imm_bb = BasicBlock::new(0, 0, DUMMY_ASID, &call_imm_encoding);
         call_imm_bb.lift();
         assert!(call_imm_bb.translation().is_some());
         println!(
@@ -145,7 +147,7 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
-        let mut ret_bb = BasicBlock::new(0, 0, &ret_encoding);
+        let mut ret_bb = BasicBlock::new(0, 0, DUMMY_ASID, &ret_encoding);
         ret_bb.lift();
         assert!(ret_bb.translation().is_some());
         println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
@@ -193,7 +195,7 @@ mod tests {
             0xff, 0x25, 0x32, 0x1b, 0x3f, 0x00  // jmp [rip+0x3f1b32]
         ];
 
-        let mut jmp_ind_bb = BasicBlock::new(0, 0, &jmp_dir_encoding);
+        let mut jmp_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, &jmp_dir_encoding);
         jmp_ind_bb.lift();
         assert!(jmp_ind_bb.translation().is_some());
         println!(
@@ -221,7 +223,7 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
-        let mut jmp_ind_bb = BasicBlock::new(0, 0, &jmp_ind_encoding);
+        let mut jmp_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, &jmp_ind_encoding);
         jmp_ind_bb.lift();
         assert!(jmp_ind_bb.translation().is_some());
         println!(
@@ -280,17 +282,17 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
-        let mut call_ind_bb = BasicBlock::new(0, 0, &call_ind_encoding);
+        let mut call_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, &call_ind_encoding);
         call_ind_bb.process();
         assert!(call_ind_bb.translation().is_some());
         assert!(call_ind_bb.branch().is_some());
 
-        let mut ret_bb = BasicBlock::new(1, 0x1337, &ret_encoding);
+        let mut ret_bb = BasicBlock::new(1, 0x1337, DUMMY_ASID, &ret_encoding);
         ret_bb.process();
         assert!(ret_bb.translation().is_some());
         assert!(ret_bb.branch().is_some());
 
-        let expected = "{\"seq_num\":1,\"pc\":4919,\"branch\":{\"ReturnSentinel\":{\"site_pc\":4925,\"seq_num\":1}}}";
+        let expected = "{\"seq_num\":1,\"pc\":4919,\"asid\":3735928559,\"branch\":{\"ReturnSentinel\":{\"site_pc\":4925,\"seq_num\":1}}}";
         let actual = serde_json::to_string(&ret_bb).unwrap();
         println!("{}", actual);
         assert_eq!(expected, actual);

@@ -21,6 +21,7 @@ Example excerpt of call/return tracking. Notice recovery of register used (`r12`
 {
     "seq_num": 1408509,
     "pc": 140737341446224,
+    "asid": 140737351873151,
     "branch": {
         "DirectCall": {
             "site_pc": 140737341446228,
@@ -31,6 +32,7 @@ Example excerpt of call/return tracking. Notice recovery of register used (`r12`
 {
     "seq_num": 1408511,
     "pc": 140737341462682,
+    "asid": 140737351873151,
     "branch": {
         "IndirectCall": {
             "site_pc": 140737341462685,
@@ -42,6 +44,7 @@ Example excerpt of call/return tracking. Notice recovery of register used (`r12`
 {
     "seq_num": 1408514,
     "pc": 140737341445989,
+    "asid": 140737351873151,
     "branch": {
         "Return": {
             "site_pc": 140737341446008,
@@ -57,6 +60,7 @@ Example excerpt of conditional jump tracking. Notice determination of whether or
 {
     "seq_num": 1309261,
     "pc": 140737347700480,
+    "asid": 140737351873151,
     "branch": {
         "DirectJump": {
             "site_pc": 140737347700480,
