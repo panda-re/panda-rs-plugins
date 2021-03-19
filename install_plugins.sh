@@ -12,27 +12,27 @@ PLUGINS=(
     panda-il-trace
 )
 
+ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
 # Installer
 install_plugin () {
 
     ARCH="$2"
     TARGET_DIR="$PANDA_PATH/$ARCH-softmmu/panda/plugins/"
 
-    cd $1
+    pushd $ROOT/$1
     echo -e "\n${YELLOW}Bulding $1 for $2 ${TOGGLE_COLOR}"
     set -x
     cargo build --release --no-default-features --features=$ARCH
     find ../target/release -maxdepth 1 -iname "libpanda*.so" -exec cp "{}" $TARGET_DIR \;
     set +x
     echo -e "\n${GREEN}Installed $1 for $2 at $(realpath $TARGET_DIR) ${TOGGLE_COLOR}"
-    cd ..
+    popd
 }
 
 # Plugin-specific ------------------------------------------------------------------------------------------------------
 
-cd panda-il-trace
-bash ./setup.sh
-cd ..
+$ROOT/panda-il-trace/setup.sh
 
 # Plugin-agnostic ------------------------------------------------------------------------------------------------------
 
@@ -57,9 +57,3 @@ do
         echo -e "\n${RED}$i does not support arm ${TOGGLE_COLOR}\n"
     fi
 done
-
-# Cleanup --------------------------------------------------------------------------------------------------------------
-
-# panda-il-trace: revert to PANDA-compatible version after we've built our shared lib plugin
-#sudo apt update
-#sudo apt-get install -y libcapstone3 libcapstone-dev
