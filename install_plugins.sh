@@ -42,24 +42,24 @@ set -e
 for i in "${PLUGINS[@]}"
 do
     install_plugin $i "x86_64"
-    # TODO: default feature error for panda-re-sys
-    #install_plugin $i "i386"
-    #install_plugin $i "mips"
-    #install_plugin $i "mipel"
+    install_plugin $i "i386"
+    install_plugin $i "mips"
+    install_plugin $i "mipsel"
+
+    # TODO: enable if support is a priority
     #install_plugin $i "ppc"
 
     # IL currently used by plug doesn't support ARM
     if [[ "$i" != "panda-il-trace" ]]
     then
-        # TODO: default feature error for panda-re-sys
-        #install_plugin $i "arm"
-        echo ""
+        install_plugin $i "arm"
     else
-        echo -e "\n${RED}$i does not support arm ${TOGGLE_COLOR}"
+        echo -e "\n${RED}$i does not support arm ${TOGGLE_COLOR}\n"
     fi
 done
 
 # Cleanup --------------------------------------------------------------------------------------------------------------
 
 # panda-il-trace: revert to PANDA-compatible version after we've built our shared lib plugin
-sudo apt-get install -y libcapstone3 libcapstone-dev
+#sudo apt update
+#sudo apt-get install -y libcapstone3 libcapstone-dev

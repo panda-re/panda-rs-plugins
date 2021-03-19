@@ -163,7 +163,7 @@ fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock, exit_code: u
     }
 
     // This block will be re-translated/re-executed due to interrupts, etc
-    if u32::from(exit_code) > panda_sys::TB_EXIT_IDX1 {
+    if u32::from(exit_code) > panda::sys::TB_EXIT_IDX1 {
         return;
     }
 

@@ -1,11 +1,16 @@
 use std::fmt;
 
-use falcon::architecture::Architecture;
 use falcon::il::Expression::{Constant, Scalar as ExpScalar};
-use falcon::il::{Block, ControlFlowGraph, Instruction, Operation, Scalar};
+use falcon::il::{Block, ControlFlowGraph, Operation, Scalar};
 use falcon::translator;
 use falcon::translator::Translator;
 use serde::Serialize;
+
+#[cfg(not(any(feature = "mips", feature = "mipsel")))]
+use falcon::architecture::Architecture;
+
+#[cfg(not(any(feature = "mips", feature = "mipsel")))]
+use falcon::il::Instruction;
 
 use super::Branch;
 
@@ -304,6 +309,7 @@ impl BasicBlock {
     }
 
     // Does instruction load a register?
+    #[cfg(not(any(feature = "mips", feature = "mipsel")))]
     fn loads_reg(instr: &Instruction, reg: &Scalar) -> bool {
         if let Some(regs) = instr.scalars_read() {
             if regs.contains(&reg) && instr.is_load() {
@@ -315,6 +321,7 @@ impl BasicBlock {
     }
 
     // Does instruction store a register?
+    #[cfg(not(any(feature = "mips", feature = "mipsel")))]
     fn stores_reg(instr: &Instruction, reg: &Scalar) -> bool {
         if let Some(regs) = instr.scalars_read() {
             if regs.contains(&reg) && instr.is_store() {
