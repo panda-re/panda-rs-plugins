@@ -83,9 +83,10 @@ Example excerpt of conditional jump tracking. Notice determination of whether or
 
 * `osi`
 
-### Setup
+## Setup
 
-Currently, this uses a different `caponstone` version than PANDA. Install it with
+This plugin currently uses a different `capstone` version than PANDA (required by Falcon IL).
+To install it:
 
 ```
 cd panda-il-trace

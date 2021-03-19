@@ -1,7 +1,7 @@
 # See: https://github.com/falconre/falcon/blob/master/Dockerfile
 
 # Remove installed capstone version
-sudo apt-get remove libcapstone3 libcapstone-dev
+sudo apt-get remove -y libcapstone3 libcapstone-dev
 
 # Build from source
 mkdir temp
