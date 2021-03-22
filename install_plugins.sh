@@ -19,12 +19,15 @@ install_plugin () {
 
     ARCH="$2"
     TARGET_DIR="$PANDA_PATH/$ARCH-softmmu/panda/plugins/"
+    PLUGIN_NAME=${1//-/_}
+    PLUGIN_SRC_SO="lib$PLUGIN_NAME.so"
+    PLUGIN_DST_SO="$PLUGIN_NAME.so"
 
     pushd $ROOT/$1
     echo -e "\n${YELLOW}Bulding $1 for $2 ${TOGGLE_COLOR}"
     set -x
     cargo build --release --no-default-features --features=$ARCH
-    find ../target/release -maxdepth 1 -iname "libpanda*.so" -exec cp "{}" $TARGET_DIR \;
+    cp ../target/release/$PLUGIN_SRC_SO $TARGET_DIR/$PLUGIN_DST_SO
     set +x
     echo -e "\n${GREEN}Installed $1 for $2 at $(realpath $TARGET_DIR) ${TOGGLE_COLOR}"
     popd
