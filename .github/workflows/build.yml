@@ -1,0 +1,16 @@
+name: Docker Build
+# Build the docker container
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Run docker build
+      run: cd $GITHUB_WORKSPACE && docker build -t panda-rs .
