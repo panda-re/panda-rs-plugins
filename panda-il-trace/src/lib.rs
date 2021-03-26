@@ -168,6 +168,7 @@ fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock, exit_code: u
     }
 
     let curr_proc = OSI.get_current_process(cpu);
+    let curr_proc_handle = OSI.get_current_process_handle(cpu);
     let curr_proc_name_c_str = unsafe { CStr::from_ptr((*curr_proc).name) };
 
     if let Ok(curr_proc_name) = curr_proc_name_c_str.to_str() {
@@ -179,10 +180,12 @@ fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock, exit_code: u
 
             if let Ok(bytes) = panda::virtual_memory_read(cpu, tb.pc, tb.size.into()) {
                 let bb = fil::BasicBlock::new_zero_copy(
-                    BB_NUM.fetch_add(1, Ordering::SeqCst),
-                    panda::current_asid(cpu) as u64,
-                    tb.pc as u64,
-                    bytes,
+                    BB_NUM.fetch_add(1, Ordering::SeqCst),                          // seq_num
+                    tb.pc as u64,                                                   // pc
+                    panda::current_asid(cpu) as u64,                                // asid
+                    OSI.get_process_pid(cpu, curr_proc_handle.as_ptr()) as i32,     // pid
+                    OSI.get_process_ppid(cpu, curr_proc_handle.as_ptr()) as i32,    // ppid
+                    bytes,                                                          // bytes
                 );
                 BBQ_IN.push(bb);
             }
