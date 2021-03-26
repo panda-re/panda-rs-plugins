@@ -108,6 +108,21 @@ impl BasicBlock {
         self.pc
     }
 
+    /// Get ASID
+    pub fn asid(&self) -> u64 {
+        self.asid
+    }
+
+    /// Get PID
+    pub fn pid(&self) -> i32 {
+        self.pid
+    }
+
+    /// Get PPID
+    pub fn ppid(&self) -> i32 {
+        self.ppid
+    }
+
     /// Get bytes
     pub fn bytes(&self) -> &[u8] {
         &self.bytes[..]
