@@ -22,6 +22,7 @@ pub struct BasicBlock {
     asid: u64,
     pid: i32,
     ppid: i32,
+    icount: i32,
     branch: Option<Branch>,
 
     #[serde(skip)]
@@ -59,12 +60,12 @@ pub struct BasicBlock {
 
 impl BasicBlock {
     /// Constructor, copies bytes from parameter slice
-    pub fn new(seq_num: usize, pc: u64, asid: u64, pid: i32, ppid: i32, bytes: &[u8]) -> Self {
-        BasicBlock::new_zero_copy(seq_num, pc, asid, pid, ppid, bytes.to_vec())
+    pub fn new(seq_num: usize, pc: u64, asid: u64, pid: i32, ppid: i32, icount: i32, bytes: &[u8]) -> Self {
+        BasicBlock::new_zero_copy(seq_num, pc, asid, pid, ppid, icount, bytes.to_vec())
     }
 
     /// Constructor, takes ownership of BB bytes to avoid copy
-    pub fn new_zero_copy(seq_num: usize, pc: u64, asid: u64, pid: i32, ppid: i32, bytes: Vec<u8>) -> Self {
+    pub fn new_zero_copy(seq_num: usize, pc: u64, asid: u64, pid: i32, ppid: i32, icount: i32, bytes: Vec<u8>) -> Self {
 
         // TODO: CI knowledge of arch features, so this plugin compiling is not a CI failure
         #[cfg(feature = "arm")]
@@ -91,6 +92,7 @@ impl BasicBlock {
             asid,
             pid,
             ppid,
+            icount,
             bytes,
             translator,
             translation: None,

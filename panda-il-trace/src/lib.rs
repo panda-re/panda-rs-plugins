@@ -185,6 +185,7 @@ fn every_basic_block(cpu: &mut CPUState, tb: &mut TranslationBlock, exit_code: u
                     panda::current_asid(cpu) as u64,                                // asid
                     OSI.get_process_pid(cpu, curr_proc_handle.as_ptr()) as i32,     // pid
                     OSI.get_process_ppid(cpu, curr_proc_handle.as_ptr()) as i32,    // ppid
+                    unsafe { panda::sys::rr_get_guest_instr_count_external() },     // icount - TODO: handle case were running live and NOT on a replay!
                     bytes,                                                          // bytes
                 );
                 BBQ_IN.push(bb);

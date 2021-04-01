@@ -15,6 +15,7 @@ mod tests {
     static DUMMY_ASID: u64 = 0xDEADBEEF;
     static DUMMY_PID: i32 = 1;
     static DUMMY_PPID: i32 = 0;
+    static DUMMY_ICOUNT: i32 = 100;
 
     // TODO: tests for MIPS and PPC
 
@@ -25,7 +26,7 @@ mod tests {
         let call_imm_encoding: [u8; 4] = [0x40, 0x00, 0x00, 0x0c]; // jal 0x100
         let ret_encoding: [u8; 4] = [0x08, 0x00, 0xe0, 0x03]; // jr $ra
 
-        let mut call_imm_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, &call_imm_encoding);
+        let mut call_imm_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, DUMMY_ICOUNT, &call_imm_encoding);
         call_imm_bb.lift();
         assert!(call_imm_bb.translation().is_some());
         println!(
@@ -41,7 +42,7 @@ mod tests {
             })
         );
 
-        let mut ret_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, &ret_encoding);
+        let mut ret_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, DUMMY_ICOUNT, &ret_encoding);
         ret_bb.lift();
         assert!(ret_bb.translation().is_some());
         println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
@@ -65,7 +66,7 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
-        let mut call_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, &call_ind_encoding);
+        let mut call_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, DUMMY_ICOUNT, &call_ind_encoding);
         call_ind_bb.lift();
         assert!(call_ind_bb.translation().is_some());
         println!(
@@ -92,7 +93,7 @@ mod tests {
             0x41, 0xff, 0x54, 0x24, 0x60    // call [r12+0x60]
         ];
 
-        let mut call_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, &call_ind_encoding);
+        let mut call_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, DUMMY_ICOUNT, &call_ind_encoding);
         call_ind_bb.lift();
         assert!(call_ind_bb.translation().is_some());
         println!(
@@ -121,7 +122,7 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
-        let mut call_imm_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, &call_imm_encoding);
+        let mut call_imm_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, DUMMY_ICOUNT, &call_imm_encoding);
         call_imm_bb.lift();
         assert!(call_imm_bb.translation().is_some());
         println!(
@@ -149,7 +150,7 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
-        let mut ret_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, &ret_encoding);
+        let mut ret_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, DUMMY_ICOUNT, &ret_encoding);
         ret_bb.lift();
         assert!(ret_bb.translation().is_some());
         println!("RET -> {:x?}\n\n{}", ret_bb.find_branch(), ret_bb);
@@ -197,7 +198,7 @@ mod tests {
             0xff, 0x25, 0x32, 0x1b, 0x3f, 0x00  // jmp [rip+0x3f1b32]
         ];
 
-        let mut jmp_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, &jmp_dir_encoding);
+        let mut jmp_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, DUMMY_ICOUNT, &jmp_dir_encoding);
         jmp_ind_bb.lift();
         assert!(jmp_ind_bb.translation().is_some());
         println!(
@@ -225,7 +226,7 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
-        let mut jmp_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, &jmp_ind_encoding);
+        let mut jmp_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, DUMMY_ICOUNT, &jmp_ind_encoding);
         jmp_ind_bb.lift();
         assert!(jmp_ind_bb.translation().is_some());
         println!(
@@ -284,17 +285,17 @@ mod tests {
             0x48, 0x31, 0xc0,               // xor rax, rax
         ];
 
-        let mut call_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, &call_ind_encoding);
+        let mut call_ind_bb = BasicBlock::new(0, 0, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, DUMMY_ICOUNT, &call_ind_encoding);
         call_ind_bb.process();
         assert!(call_ind_bb.translation().is_some());
         assert!(call_ind_bb.branch().is_some());
 
-        let mut ret_bb = BasicBlock::new(1, 0x1337, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, &ret_encoding);
+        let mut ret_bb = BasicBlock::new(1, 0x1337, DUMMY_ASID, DUMMY_PID, DUMMY_PPID, DUMMY_ICOUNT, &ret_encoding);
         ret_bb.process();
         assert!(ret_bb.translation().is_some());
         assert!(ret_bb.branch().is_some());
 
-        let expected = "{\"seq_num\":1,\"pc\":4919,\"asid\":3735928559,\"pid\":1,\"ppid\":0,\"branch\":{\"ReturnSentinel\":{\"site_pc\":4925,\"seq_num\":1}}}";
+        let expected = "{\"seq_num\":1,\"pc\":4919,\"asid\":3735928559,\"pid\":1,\"ppid\":0,\"icount\":100,\"branch\":{\"ReturnSentinel\":{\"site_pc\":4925,\"seq_num\":1}}}";
         let actual = serde_json::to_string(&ret_bb).unwrap();
         println!("{}", actual);
         assert_eq!(expected, actual);
