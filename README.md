@@ -2,7 +2,7 @@
 
 A collection of plugins for PANDA written in Rust. See [getting started guide](./GETTING_STARTED.md).
 
-## panda-gdb
+## [panda-gdb](./panda-gdb/README.md)
 
 A multi-platform userland GDB stub with the ability to step through processes and replays alike.
 
