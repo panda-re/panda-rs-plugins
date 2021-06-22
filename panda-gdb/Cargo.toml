@@ -11,8 +11,9 @@ crate-type = ["cdylib"]
 #panda-re = "0.4.0"
 panda-re = { version = "0.5.0", path = "../../panda-rs/panda-rs" }
 #panda-re = { path = "../../panda-rs/panda-rs", default-features = false }
-gdbstub = "0.3"
+gdbstub = "0.5"
 lazy_static = "1.4.0"
+gdbstub_arch = "0.1.0"
 
 [features]
 default = ["x86_64"]

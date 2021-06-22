@@ -113,7 +113,6 @@ impl State {
     }
 
     pub fn add_breakpoint(&self, pc: target_ptr_t) -> bool {
-        println!("Add breakpoint: {:#x?}", pc);
         self.breakpoints
             .write()
             .unwrap()
@@ -121,7 +120,6 @@ impl State {
     }
 
     pub fn remove_breakpoint(&self, pc: target_ptr_t) -> bool {
-        println!("Remove breakpoint: {:#x?}", pc);
         self.breakpoints
             .write()
             .unwrap()
