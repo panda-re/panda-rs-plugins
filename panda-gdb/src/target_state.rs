@@ -6,6 +6,7 @@ use std::collections::HashSet;
 
 pub struct State {
     single_step: AtomicBool,
+    exit_kernel: AtomicBool,
     breakpoints: RwLock<HashSet<target_ptr_t>>,
     cpu: Mutex<Option<usize>>,
     pc: AtomicUsize,
@@ -24,6 +25,7 @@ impl State {
     fn new() -> Self {
         State {
             single_step: AtomicBool::new(false),
+            exit_kernel: AtomicBool::new(false),
             breakpoints: RwLock::new(HashSet::new()),
             brk: Signal::new(),
             cont: Signal::new(),
@@ -38,6 +40,26 @@ impl State {
             .read()
             .unwrap()
             .contains(&pc)
+    }
+
+    pub fn exiting_kernel(&self) -> bool {
+        self.exit_kernel.load(Ordering::SeqCst)
+    }
+
+    pub fn exited_kernel(&self, pc: target_ptr_t) -> bool {
+        const MASK: target_ptr_t = 0xffffff000000;
+        const VALUE: target_ptr_t = 0x555555000000;
+
+        self.exiting_kernel() && (0x555555554000..0x55555555c000).contains(&pc)
+        //self.exiting_kernel() && (pc & MASK == VALUE)
+    }
+
+    pub fn set_exit_kernel(&self) {
+        self.exit_kernel.store(true, Ordering::SeqCst)
+    }
+
+    pub fn unset_exit_kernel(&self) {
+        self.exit_kernel.store(false, Ordering::SeqCst)
     }
 
     pub fn single_stepping(&self) -> bool {
@@ -91,6 +113,7 @@ impl State {
     }
 
     pub fn add_breakpoint(&self, pc: target_ptr_t) -> bool {
+        println!("Add breakpoint: {:#x?}", pc);
         self.breakpoints
             .write()
             .unwrap()
@@ -98,6 +121,7 @@ impl State {
     }
 
     pub fn remove_breakpoint(&self, pc: target_ptr_t) -> bool {
+        println!("Remove breakpoint: {:#x?}", pc);
         self.breakpoints
             .write()
             .unwrap()

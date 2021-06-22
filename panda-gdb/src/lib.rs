@@ -11,6 +11,7 @@ mod target_state;
 use target_state::{BreakStatus, STATE};
 
 mod connection;
+mod memory_map;
 
 #[derive(PandaArgs)]
 #[name = "gdb"]
@@ -30,14 +31,7 @@ fn init(_: &mut PluginHandle) -> bool {
     lazy_static::initialize(&ARGS);
     lazy_static::initialize(&STATE);
     if ARGS.on_start {
-        let connection = connection::wait_for_gdb();
-        STATE.start_single_stepping();
-
-        // Debugger runs in a seperate thread
-        std::thread::spawn(||{
-            let mut debugger = GdbStub::new(connection);
-            debugger.run(&mut PandaTarget)
-        });    
+        STATE.set_exit_kernel();
     }
 
     true
@@ -77,10 +71,27 @@ fn on_process_start(_cpu: &mut CPUState, name: *const c_char, _asid: target_ulon
             });
         }
     }
- }
+}
 
 #[panda::insn_exec]
 fn every_instruction(cpu: &mut CPUState, pc: target_ptr_t) {
+    // Check if we have just exited the kernel while the user is waiting for kernel
+    // to exit
+    if STATE.exited_kernel(pc) {
+        // Once we exit the kernel start single stepping and stop watching for kernel to exit
+        STATE.unset_exit_kernel();
+        STATE.start_single_stepping();
+
+        memory_map::print(cpu);
+
+        let connection = connection::wait_for_gdb();
+        // Debugger runs in a seperate thread
+        std::thread::spawn(||{
+            let mut debugger = GdbStub::new(connection);
+            debugger.run(&mut PandaTarget)
+        });
+    }
+
     // Break if single stepping or if we hit a breakpoint
     if STATE.single_stepping() || STATE.breakpoints_contain(pc) {
         // Mark single step as completed
@@ -100,5 +111,5 @@ fn every_instruction(cpu: &mut CPUState, pc: target_ptr_t) {
 #[panda::insn_translate]
 fn translate_instr(_: &mut CPUState, pc: target_ptr_t) -> bool {
     // Only instrument the instruction if we might break on it
-    STATE.single_stepping() || STATE.breakpoints_contain(pc)
+    STATE.single_stepping() || STATE.breakpoints_contain(pc) || STATE.exited_kernel(pc)
 }

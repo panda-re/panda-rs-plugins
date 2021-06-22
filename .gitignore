@@ -13,6 +13,8 @@ Cargo.lock
 **/*.log
 test-rr-nondet.log
 test-rr-snp
+*-rr-nondet.log
+*-rr-snp
 
 # JSON
 *.json
