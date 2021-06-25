@@ -6,10 +6,15 @@ use gdbstub::{
         StopReason,
         ResumeAction,
     },
-    arch::Arch
+    arch::Arch,
+    outputln,
 };
 
 use std::convert::TryInto;
+
+use panda::prelude::*;
+use panda::regs::Reg;
+use panda::taint;
 
 pub struct PandaTarget;
 
@@ -55,8 +60,13 @@ impl Target for PandaTarget {
     fn breakpoints(&mut self) -> Option<ext::breakpoints::BreakpointsOps<Self>> {
         Some(self as _)
     }
+
+    fn monitor_cmd(&mut self) -> Option<ext::monitor_cmd::MonitorCmdOps<Self>> {
+        Some(self as _)
+    }
 }
 
+// Implement the standard operations as a fake-single-thread target
 impl SingleThreadOps for PandaTarget {
     fn resume(
         &mut self,
@@ -273,12 +283,14 @@ impl SingleThreadOps for PandaTarget {
     }
 }
 
+// Breakpoints: just say we implement software breakpoints
 impl ext::breakpoints::Breakpoints for PandaTarget {
     fn sw_breakpoint(&mut self) -> Option<ext::breakpoints::SwBreakpointOps<'_, Self>> {
         Some(self as _)
     }
 }
 
+// Software breakpoints
 impl ext::breakpoints::SwBreakpoint for PandaTarget {
     fn add_sw_breakpoint(
         &mut self,
@@ -294,6 +306,105 @@ impl ext::breakpoints::SwBreakpoint for PandaTarget {
         _kind: <Self::Arch as Arch>::BreakpointKind
     ) -> TargetResult<bool, Self> {
         Ok(STATE.remove_breakpoint(addr))
+    }
+}
+
+impl ext::monitor_cmd::MonitorCmd for PandaTarget {
+    fn handle_monitor_cmd(
+        &mut self,
+        cmd: &[u8],
+        mut out: ext::monitor_cmd::ConsoleOutput<'_>
+    ) -> Result<(), Self::Error> {
+        if let Ok(cmd) = std::str::from_utf8(cmd) {
+            let cpu = STATE.wait_for_cpu();
+
+            // this parsing is totally fine™
+            if cmd.starts_with("taint ") {
+                let args = cmd.split(' ').skip(1).collect::<Vec<_>>();
+
+                if args.len() != 2 {
+                    outputln!(out, "Invalid syntax. Expected:");
+                    outputln!(out, "`taint [*addr | reg] [label]`");
+                    return Ok(())
+                }
+
+                if args[0].starts_with('*') {
+                    // taint memory
+                    let addr = &args[0][1..];
+                    let addr = target_ptr_t::from_str_radix(
+                        addr.strip_prefix("0x")
+                            .unwrap_or(addr),
+                        16,
+                    );
+                    let label: Result<u32, _> = args[1].parse();
+                    if let Ok(label) = label {
+                        if let Ok(addr) = addr {
+                            let addr = panda::mem::virt_to_phys(cpu, addr);
+                            taint::label_ram(addr, label);
+                            outputln!(out, "Memory location {:#x?} tainted.", addr);
+                        } else {
+                            outputln!(out, "`addr` must be a hexadecimal integer");
+                        }
+                    } else {
+                        outputln!(out, "Label must be an unsigned integer");
+                    }
+                } else {
+                    // taint register
+                    let reg: Result<Reg, _> = args[0].parse();
+                    let label: Result<u32, _> = args[1].parse();
+
+                    if let Ok(label) = label {
+                        if let Ok(reg) = reg {
+                            taint::label_reg(reg, label);
+                            outputln!(out, "Register {} tainted.", reg.to_string());
+                        } else {
+                            outputln!(out, "`reg` must be a valid register name");
+                        }
+                    } else {
+                        outputln!(out, "Label must be an unsigned integer");
+                    }
+                }
+            } else if cmd.starts_with("check_taint ") {
+                let args = cmd.split(' ').skip(1).collect::<Vec<_>>();
+
+                if args.len() != 1 {
+                    outputln!(out, "Invalid syntax. Expected:");
+                    outputln!(out, "`check_taint [*addr | reg]`");
+                    return Ok(())
+                }
+
+                if args[0].starts_with('*') {
+                    // taint memory
+                    let addr = &args[0][1..];
+                    let addr = target_ptr_t::from_str_radix(
+                        addr.strip_prefix("0x")
+                            .unwrap_or(addr),
+                        16,
+                    );
+                    if let Ok(addr) = addr {
+                        let addr = panda::mem::virt_to_phys(cpu, addr);
+                        outputln!(out, "{:?}", taint::check_ram(addr));
+                    } else {
+                        outputln!(out, "`addr` must be a hexadecimal integer");
+                    }
+                } else {
+                    // taint register
+                    let reg: Result<Reg, _> = args[0].parse();
+
+                    if let Ok(reg) = reg {
+                        outputln!(out, "{:?}", taint::check_reg(reg));
+                    } else {
+                        outputln!(out, "`reg` must be a valid register name");
+                    }
+                }
+            } else {
+                outputln!(out, "Invalid command");
+            }
+        } else {
+            outputln!(out, "Command must be valid UTF-8");
+        }
+
+        Ok(())
     }
 }
 
