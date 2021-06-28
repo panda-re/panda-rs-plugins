@@ -1,4 +1,4 @@
-use crate::target_state::{STATE, BreakStatus};
+use crate::{monitor_commands, target_state::{STATE, BreakStatus}};
 use gdbstub::{
     target::{Target, TargetResult, TargetError, ext},
     target::ext::base::singlethread::{
@@ -11,10 +11,6 @@ use gdbstub::{
 };
 
 use std::convert::TryInto;
-
-use panda::prelude::*;
-use panda::regs::Reg;
-use panda::taint;
 
 pub struct PandaTarget;
 
@@ -317,89 +313,7 @@ impl ext::monitor_cmd::MonitorCmd for PandaTarget {
     ) -> Result<(), Self::Error> {
         if let Ok(cmd) = std::str::from_utf8(cmd) {
             let cpu = STATE.wait_for_cpu();
-
-            // this parsing is totally fine™
-            if cmd.starts_with("taint ") {
-                let args = cmd.split(' ').skip(1).collect::<Vec<_>>();
-
-                if args.len() != 2 {
-                    outputln!(out, "Invalid syntax. Expected:");
-                    outputln!(out, "`taint [*addr | reg] [label]`");
-                    return Ok(())
-                }
-
-                if args[0].starts_with('*') {
-                    // taint memory
-                    let addr = &args[0][1..];
-                    let addr = target_ptr_t::from_str_radix(
-                        addr.strip_prefix("0x")
-                            .unwrap_or(addr),
-                        16,
-                    );
-                    let label: Result<u32, _> = args[1].parse();
-                    if let Ok(label) = label {
-                        if let Ok(addr) = addr {
-                            let addr = panda::mem::virt_to_phys(cpu, addr);
-                            taint::label_ram(addr, label);
-                            outputln!(out, "Memory location {:#x?} tainted.", addr);
-                        } else {
-                            outputln!(out, "`addr` must be a hexadecimal integer");
-                        }
-                    } else {
-                        outputln!(out, "Label must be an unsigned integer");
-                    }
-                } else {
-                    // taint register
-                    let reg: Result<Reg, _> = args[0].parse();
-                    let label: Result<u32, _> = args[1].parse();
-
-                    if let Ok(label) = label {
-                        if let Ok(reg) = reg {
-                            taint::label_reg(reg, label);
-                            outputln!(out, "Register {} tainted.", reg.to_string());
-                        } else {
-                            outputln!(out, "`reg` must be a valid register name");
-                        }
-                    } else {
-                        outputln!(out, "Label must be an unsigned integer");
-                    }
-                }
-            } else if cmd.starts_with("check_taint ") {
-                let args = cmd.split(' ').skip(1).collect::<Vec<_>>();
-
-                if args.len() != 1 {
-                    outputln!(out, "Invalid syntax. Expected:");
-                    outputln!(out, "`check_taint [*addr | reg]`");
-                    return Ok(())
-                }
-
-                if args[0].starts_with('*') {
-                    // taint memory
-                    let addr = &args[0][1..];
-                    let addr = target_ptr_t::from_str_radix(
-                        addr.strip_prefix("0x")
-                            .unwrap_or(addr),
-                        16,
-                    );
-                    if let Ok(addr) = addr {
-                        let addr = panda::mem::virt_to_phys(cpu, addr);
-                        outputln!(out, "{:?}", taint::check_ram(addr));
-                    } else {
-                        outputln!(out, "`addr` must be a hexadecimal integer");
-                    }
-                } else {
-                    // taint register
-                    let reg: Result<Reg, _> = args[0].parse();
-
-                    if let Ok(reg) = reg {
-                        outputln!(out, "{:?}", taint::check_reg(reg));
-                    } else {
-                        outputln!(out, "`reg` must be a valid register name");
-                    }
-                }
-            } else {
-                outputln!(out, "Invalid command");
-            }
+            monitor_commands::handle_command(cmd, cpu, out);
         } else {
             outputln!(out, "Command must be valid UTF-8");
         }

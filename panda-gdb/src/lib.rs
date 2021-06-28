@@ -12,6 +12,7 @@ use target_state::{BreakStatus, STATE};
 
 mod connection;
 mod memory_map;
+mod monitor_commands;
 
 #[derive(PandaArgs)]
 #[name = "gdb"]
