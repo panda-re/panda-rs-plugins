@@ -10,6 +10,8 @@ use gdbstub::{
     outputln,
 };
 
+use panda::plugins::osi::OSI;
+
 use std::convert::TryInto;
 
 pub struct PandaTarget;
@@ -59,6 +61,10 @@ impl Target for PandaTarget {
 
     fn monitor_cmd(&mut self) -> Option<ext::monitor_cmd::MonitorCmdOps<Self>> {
         Some(self as _)
+    }
+
+    fn section_offsets(&mut self) -> Option<ext::section_offsets::SectionOffsetsOps<Self>> {
+        Some(self)
     }
 }
 
@@ -319,6 +325,26 @@ impl ext::monitor_cmd::MonitorCmd for PandaTarget {
         }
 
         Ok(())
+    }
+}
+
+impl ext::section_offsets::SectionOffsets for PandaTarget {
+    fn get_section_offsets(&mut self) -> Result<ext::section_offsets::Offsets<<Self::Arch as Arch>::Usize>, Self::Error> {
+        let cpu = STATE.wait_for_cpu();
+        let mut process = OSI.get_current_process(cpu);
+        let mappings = OSI.get_mappings(cpu, &mut *process);
+        if mappings.len() >= 3 {
+            let text = &mappings[0];
+            let data = &mappings[1];
+            let bss = &mappings[2];
+            Ok(ext::section_offsets::Offsets::Sections {
+                text: text.base,
+                data: data.base,
+                bss: Some(bss.base),
+            })
+        } else {
+            Err(())
+        }
     }
 }
 
