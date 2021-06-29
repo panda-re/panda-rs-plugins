@@ -8,6 +8,7 @@ pub(crate) enum Command {
     CheckTaint(TaintTarget),
     GetTaint(TaintTarget),
     Help,
+    MemInfo
 }
 
 impl Command {
@@ -27,10 +28,14 @@ peg::parser!{
             = taint()
             / check_taint()
             / get_taint()
+            / mem_info()
             / help()
 
         rule help() -> Command
-            = "help" _ { Command::Help }
+            = "help" { Command::Help }
+
+        rule mem_info() -> Command
+            = "meminfo" { Command::MemInfo }
 
         rule taint() -> Command
             = "taint" _ target:taint_target() _ label:number() {
@@ -50,6 +55,7 @@ peg::parser!{
         rule get_taint() -> Command
             = "get_taint" _ target:taint_target() { Command::GetTaint(target) }
 
+        // TODO: display available registers on error
         rule register() -> Reg
             = reg:$(['a'..='z' | 'A'..='Z'] ['a'..='z' | 'A'..='Z' | '0'..='9']*) {?
                 reg.parse()

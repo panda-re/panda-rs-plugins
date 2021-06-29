@@ -7,6 +7,7 @@ mod parser;
 use parser::{Command, TaintTarget};
 
 pub(crate) fn handle_command(cmd: &str, cpu: &mut CPUState, mut out: impl std::fmt::Write) {
+    let cmd = cmd.trim();
     // this parsing is totally fine™
     match Command::parse(cmd) {
         Ok(Command::Taint(target, label)) => {
@@ -54,7 +55,8 @@ pub(crate) fn handle_command(cmd: &str, cpu: &mut CPUState, mut out: impl std::f
                 }
             }
         },
-        Ok(Command::Help) => print_help_text(),
+        Ok(Command::MemInfo) => crate::memory_map::print_to_gdb(cpu, out),
+        Ok(Command::Help) => print_help_text(out),
         Err(peg::error::ParseError { location, expected }) => {
             outputln!(out);
             outputln!(out, "Error:");
@@ -80,6 +82,11 @@ pub(crate) fn handle_command(cmd: &str, cpu: &mut CPUState, mut out: impl std::f
     }
 }
 
-fn print_help_text() {
-    todo!()
+fn print_help_text(mut out: impl std::fmt::Write) {
+    outputln!(out);
+    outputln!(out, "Commands:");
+    outputln!(out, "  meminfo - print out the current memory map");
+    outputln!(out, "  taint - apply taint to a given register/memory location");
+    outputln!(out, "  check_taint - check if a given register/memory location is tainted");
+    outputln!(out, "  get_taint - get the taint labels for a given register/memory location");
 }
