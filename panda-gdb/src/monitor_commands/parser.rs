@@ -28,7 +28,6 @@ peg::parser!{
             / check_taint()
             / get_taint()
             / help()
-            / expected!("command")
 
         rule help() -> Command
             = "help" _ { Command::Help }
@@ -39,8 +38,11 @@ peg::parser!{
             }
 
         rule taint_target() -> TaintTarget
-            = "*" addr:number() { TaintTarget::Address(addr) }
-            / reg:register() { TaintTarget::Register(reg) }
+            = quiet!{
+                "*" addr:number() { TaintTarget::Address(addr) }
+                / reg:register() { TaintTarget::Register(reg) }
+            }
+            / expected!("an address (example: *0x55555555) or a register name")
 
         rule check_taint() -> Command
             = "check_taint" _ target:taint_target() { Command::CheckTaint(target) }
@@ -55,16 +57,18 @@ peg::parser!{
             }
 
         rule number() -> u64
-            = "0x" hex:$(['0'..='9' | 'a'..='f' | 'A'..='F']+) {?
-                u64::from_str_radix(hex, 16)
-                    .map_err(|_| "invalid hex number")
+            = quiet!{
+                "0x" hex:$(['0'..='9' | 'a'..='f' | 'A'..='F']+) {?
+                    u64::from_str_radix(hex, 16)
+                        .map_err(|_| "invalid hex number")
+                }
+                / decimal:$(['0'..='9']+) {?
+                    decimal.parse()
+                        .map_err(|_| "invalid decimal number")
+                }
             }
-            / decimal:$(['0'..='9']+) {?
-                decimal.parse()
-                    .map_err(|_| "invalid decimal number")
-            }
-            / expected!("number")
+            / expected!("a number")
 
-        rule _() = [' ' | '\n' | '\t']+
+        rule _() = quiet!{ [' ' | '\n' | '\t']+ }
     }
 }

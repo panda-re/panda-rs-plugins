@@ -55,7 +55,28 @@ pub(crate) fn handle_command(cmd: &str, cpu: &mut CPUState, mut out: impl std::f
             }
         },
         Ok(Command::Help) => print_help_text(),
-        Err(err) => outputln!(out, "Error: {:?}", err),
+        Err(peg::error::ParseError { location, expected }) => {
+            outputln!(out);
+            outputln!(out, "Error:");
+            outputln!(out, "    {}", cmd);
+            let expected: Vec<&str> = expected.tokens().collect();
+            if let &[expected] = &expected[..] {
+                outputln!(
+                    out,
+                    "   {}^------ Invalid syntax, expected {}",
+                    " ".repeat(location.column),
+                    expected
+                );
+            } else {
+                outputln!(
+                    out,
+                    "   {}^------ Invalid syntax, expected one of the following: {}",
+                    " ".repeat(location.column),
+                    expected.join(", ")
+                );
+            }
+            outputln!(out);
+        }
     }
 }
 
