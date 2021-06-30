@@ -6,6 +6,9 @@ use gdbstub::outputln;
 mod parser;
 use parser::{Command, TaintTarget};
 
+mod thread_info;
+mod proc_info;
+
 pub(crate) fn handle_command(cmd: &str, cpu: &mut CPUState, mut out: impl std::fmt::Write) {
     let cmd = cmd.trim();
     // this parsing is totally fine™
@@ -56,6 +59,8 @@ pub(crate) fn handle_command(cmd: &str, cpu: &mut CPUState, mut out: impl std::f
             }
         },
         Ok(Command::MemInfo) => crate::memory_map::print_to_gdb(cpu, out),
+        Ok(Command::ThreadInfo) => thread_info::print(cpu, out),
+        Ok(Command::ProcInfo) => proc_info::print(cpu, out),
         Ok(Command::Help) => print_help_text(out),
         Err(peg::error::ParseError { location, expected }) => {
             outputln!(out);
@@ -89,4 +94,6 @@ fn print_help_text(mut out: impl std::fmt::Write) {
     outputln!(out, "  taint - apply taint to a given register/memory location");
     outputln!(out, "  check_taint - check if a given register/memory location is tainted");
     outputln!(out, "  get_taint - get the taint labels for a given register/memory location");
+    outputln!(out, "  threadinfo - get info about threads of the current process");
+    outputln!(out, "  procinfo - get info about the current process");
 }

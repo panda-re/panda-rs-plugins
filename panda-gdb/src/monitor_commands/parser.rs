@@ -8,7 +8,9 @@ pub(crate) enum Command {
     CheckTaint(TaintTarget),
     GetTaint(TaintTarget),
     Help,
-    MemInfo
+    MemInfo,
+    ThreadInfo,
+    ProcInfo,
 }
 
 impl Command {
@@ -29,6 +31,8 @@ peg::parser!{
             / check_taint()
             / get_taint()
             / mem_info()
+            / proc_info()
+            / thread_info()
             / help()
 
         rule help() -> Command
@@ -36,6 +40,12 @@ peg::parser!{
 
         rule mem_info() -> Command
             = "meminfo" { Command::MemInfo }
+
+        rule proc_info() -> Command
+            = "procinfo" { Command::ProcInfo }
+
+        rule thread_info() -> Command
+            = "threadinfo" { Command::ThreadInfo }
 
         rule taint() -> Command
             = "taint" _ target:taint_target() _ label:number() {
