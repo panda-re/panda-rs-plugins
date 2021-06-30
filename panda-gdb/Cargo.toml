@@ -15,6 +15,7 @@ gdbstub = "0.5"
 lazy_static = "1.4.0"
 gdbstub_arch = "0.1.0"
 peg = "0.7.0"
+tabwriter = "1.2.1"
 
 [features]
 default = ["x86_64"]

@@ -11,6 +11,7 @@ pub(crate) enum Command {
     MemInfo,
     ThreadInfo,
     ProcInfo,
+    ProcList,
 }
 
 impl Command {
@@ -32,6 +33,7 @@ peg::parser!{
             / get_taint()
             / mem_info()
             / proc_info()
+            / proc_list()
             / thread_info()
             / help()
 
@@ -43,6 +45,9 @@ peg::parser!{
 
         rule proc_info() -> Command
             = "procinfo" { Command::ProcInfo }
+
+        rule proc_list() -> Command
+            = "proclist" { Command::ProcList }
 
         rule thread_info() -> Command
             = "threadinfo" { Command::ThreadInfo }

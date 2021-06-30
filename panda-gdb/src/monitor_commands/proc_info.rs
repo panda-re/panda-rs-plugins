@@ -13,5 +13,6 @@ pub(crate) fn print(cpu: &mut CPUState, mut out: impl std::fmt::Write) {
     outputln!(out, "ASID: {:#x?}", proc.asid);
     outputln!(out, "Parent PID: {}", proc.ppid);
     outputln!(out, "Creation time: {}", proc.create_time);
+    outputln!(out, "PC in shared library: {}", OSI.in_shared_object(cpu, &*proc));
     outputln!(out);
 }
