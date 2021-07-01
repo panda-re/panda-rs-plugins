@@ -11,7 +11,7 @@ Currently only designed to be used with replays.
 Example usage:
 
 ```
-panda-system-x86_64 -os "linux-64-ubuntu:4.15.0-72-generic-noaslr-nokaslr" -replay catmaps -panda gdb:on_start=1 -m 1G
+panda-system-x86_64 -os "linux-64-ubuntu:4.15.0-72-generic-noaslr-nokaslr" -replay catmaps -panda gdb:on_entry=1 -m 1G
 ```
 
 Example of connecting to them:
@@ -64,6 +64,6 @@ Here are some of the other commands that have been tested and which work:
 
 ### Arguments
 
-* `on_start`: bool, optional. Defaults to true. If set to true, process will break on the entrypoint of the first process.
+* `on_entry`: bool, optional. Defaults to true. If set to true, process will break on the entrypoint of the first process.
 * `file`: String, optional. If set, process will break when the process of filename `file` starts.
 

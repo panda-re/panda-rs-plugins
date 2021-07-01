@@ -11,6 +11,7 @@ pub struct Args {
     pub base: u64,
 
     pub ghidra_elf: bool,
+    pub on_entry: bool,
     pub on_start: bool,
     pub absolute_addrs: bool,
 }

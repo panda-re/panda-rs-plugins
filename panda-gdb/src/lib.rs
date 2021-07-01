@@ -14,14 +14,8 @@ mod connection;
 mod memory_map;
 mod monitor_commands;
 
-#[derive(PandaArgs)]
-#[name = "gdb"]
-struct Args {
-    #[cfg(not(any(feature = "ppc", feature = "mips", feature = "mipsel", feature = "i386")))]
-    #[arg(default = "invalid")]
-    file: String,
-    on_start: bool,
-}
+mod args;
+use args::Args;
 
 lazy_static::lazy_static!{
     static ref ARGS: Args = Args::from_panda_args();
@@ -31,8 +25,19 @@ lazy_static::lazy_static!{
 fn init(_: &mut PluginHandle) -> bool {
     lazy_static::initialize(&ARGS);
     lazy_static::initialize(&STATE);
-    if ARGS.on_start {
+    if ARGS.on_entry {
         STATE.set_exit_kernel();
+    }
+
+    if ARGS.on_start {
+        let connection = connection::wait_for_gdb();
+        STATE.start_single_stepping();
+
+        // Debugger runs in a seperate thread
+        std::thread::spawn(||{
+            let mut debugger = GdbStub::new(connection);
+            debugger.run(&mut PandaTarget)
+        });    
     }
 
     true
@@ -43,36 +48,36 @@ fn on_shutdown() {
     STATE.brk.signal(BreakStatus::Exit);
 }
 
-#[panda::on_process_end]
-#[cfg(not(any(feature = "ppc", feature = "mips", feature = "mipsel", feature = "i386")))]
-fn on_process_end(_cpu: &mut CPUState, _name: *const c_char, _asid: target_ulong, pid: c_int) {
-    if STATE.get_pid() == Some(pid as _) {
-        STATE.unset_pid();
-        STATE.brk.signal(BreakStatus::Exit);
-    }
-}
+//#[panda::on_process_end]
+//#[cfg(not(any(feature = "ppc", feature = "mips", feature = "mipsel", feature = "i386")))]
+//fn on_process_end(_cpu: &mut CPUState, _name: *const c_char, _asid: target_ulong, pid: c_int) {
+//    if STATE.get_pid() == Some(pid as _) {
+//        STATE.unset_pid();
+//        STATE.brk.signal(BreakStatus::Exit);
+//    }
+//}
 
-#[panda::on_process_start]
-#[cfg(not(any(feature = "ppc", feature = "mips", feature = "mipsel", feature = "i386")))]
-fn on_process_start(_cpu: &mut CPUState, name: *const c_char, _asid: target_ulong, pid: c_int) {
-    // If a process is already being debugged, don't attach another debugger
-    if !STATE.is_pid_set() {
-        let name = unsafe { CStr::from_ptr(name) }.to_string_lossy();
-        if name == ARGS.file {
-            println!("*****************************");
-            println!("{} started, pid: {}", name, pid);
-            println!("*****************************");
-            STATE.set_pid(pid as _);
-            STATE.start_single_stepping();
-            let connection = connection::wait_for_gdb();
-            // Debugger runs in a seperate thread
-            std::thread::spawn(||{
-                let mut debugger = GdbStub::new(connection);
-                debugger.run(&mut PandaTarget)
-            });
-        }
-    }
-}
+//#[panda::on_process_start]
+//#[cfg(not(any(feature = "ppc", feature = "mips", feature = "mipsel", feature = "i386")))]
+//fn on_process_start(_cpu: &mut CPUState, name: *const c_char, _asid: target_ulong, pid: c_int) {
+//    // If a process is already being debugged, don't attach another debugger
+//    if !STATE.is_pid_set() {
+//        let name = unsafe { CStr::from_ptr(name) }.to_string_lossy();
+//        if name == ARGS.file {
+//            println!("*****************************");
+//            println!("{} started, pid: {}", name, pid);
+//            println!("*****************************");
+//            STATE.set_pid(pid as _);
+//            STATE.start_single_stepping();
+//            let connection = connection::wait_for_gdb();
+//            // Debugger runs in a seperate thread
+//            std::thread::spawn(||{
+//                let mut debugger = GdbStub::new(connection);
+//                debugger.run(&mut PandaTarget)
+//            });
+//        }
+//    }
+//}
 
 #[panda::insn_exec]
 fn every_instruction(cpu: &mut CPUState, pc: target_ptr_t) {
